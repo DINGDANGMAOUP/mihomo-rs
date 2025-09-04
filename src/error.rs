@@ -83,6 +83,10 @@ pub enum MihomoError {
     #[error("不支持的平台: {0}")]
     UnsupportedPlatform(String),
 
+    /// IO错误
+    #[error("IO错误: {0}")]
+    IoError(String),
+
     /// 其他错误
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),

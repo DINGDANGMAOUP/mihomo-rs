@@ -143,6 +143,30 @@ enum ServiceAction {
         #[command(subcommand)]
         action: VersionAction,
     },
+    /// 升级服务
+    Upgrade {
+        /// 目标版本（不指定则升级到最新版本）
+        #[arg(short, long)]
+        version: Option<String>,
+        /// 是否备份当前版本
+        #[arg(short, long, default_value = "true")]
+        backup: bool,
+    },
+    /// 卸载服务
+    Uninstall {
+        /// 是否保留配置文件
+        #[arg(short, long)]
+        keep_config: bool,
+        /// 确认卸载（防止误操作）
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// 清理备份文件
+    Cleanup {
+        /// 保留的备份文件数量
+        #[arg(short, long, default_value = "3")]
+        keep: usize,
+    },
 }
 
 /// 版本操作
@@ -272,6 +296,53 @@ async fn handle_service(
         ServiceAction::Version { action } => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
             handle_version(&mut service_manager, action).await?;
+        },
+        ServiceAction::Upgrade { version, backup } => {
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            
+            match version {
+                Some(target_version) => {
+                    println!("🔄 升级到指定版本: {}...", target_version);
+                    
+                    // 获取可用版本列表
+                    let versions = service_manager.get_available_versions().await?;
+                    let version_info = versions.into_iter()
+                        .find(|v| v.version.contains(&target_version))
+                        .ok_or_else(|| format!("未找到版本: {}", target_version))?;
+                    
+                    service_manager.upgrade_to_version(&version_info, backup).await?;
+                    println!("✅ 升级到版本 {} 成功", target_version);
+                },
+                None => {
+                    println!("🔄 升级到最新版本...");
+                    service_manager.upgrade_to_latest(backup).await?;
+                    println!("✅ 升级到最新版本成功");
+                }
+            }
+        },
+        ServiceAction::Uninstall { keep_config, confirm } => {
+            if !confirm {
+                println!("❌ 请使用 --confirm 参数确认卸载操作");
+                println!("⚠️  这将删除所有 mihomo-rs 相关文件");
+                return Ok(());
+            }
+            
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            println!("🗑️  开始卸载 mihomo-rs...");
+            
+            if keep_config {
+                println!("📝 将保留配置文件");
+            } else {
+                println!("⚠️  将删除所有文件包括配置");
+            }
+            
+            service_manager.uninstall(keep_config).await?;
+        },
+        ServiceAction::Cleanup { keep } => {
+            let service_manager = ServiceManager::new_with_defaults()?;
+            println!("🧹 清理备份文件，保留最新 {} 个...", keep);
+            service_manager.cleanup_backups(keep)?;
+            println!("✅ 备份文件清理完成");
         },
     }
     

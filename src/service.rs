@@ -688,6 +688,237 @@ rules:
     pub fn get_config(&self) -> &ServiceConfig {
         &self.config
     }
+
+    /// 备份当前二进制文件
+    /// 
+    /// # Returns
+    /// 
+    /// 返回备份文件路径
+    fn backup_current_binary(&self) -> Result<PathBuf> {
+        let config_dir = get_app_config_dir()?;
+        let backup_dir = config_dir.join("backups");
+        
+        // 创建备份目录
+        if !backup_dir.exists() {
+            fs::create_dir_all(&backup_dir)
+                .map_err(|e| MihomoError::IoError(format!("创建备份目录失败: {}", e)))?;
+        }
+        
+        // 生成备份文件名（包含时间戳）
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let backup_path = backup_dir.join(format!("mihomo.backup.{}", timestamp));
+        
+        // 复制当前二进制文件
+        if self.config.binary_path.exists() {
+            fs::copy(&self.config.binary_path, &backup_path)
+                .map_err(|e| MihomoError::IoError(format!("备份文件失败: {}", e)))?;
+            println!("已备份当前版本到: {:?}", backup_path);
+        }
+        
+        Ok(backup_path)
+    }
+
+    /// 升级到指定版本
+    /// 
+    /// # Arguments
+    /// 
+    /// * `version` - 目标版本信息
+    /// * `backup` - 是否备份当前版本
+    /// 
+    /// # Returns
+    /// 
+    /// 返回升级结果
+    pub async fn upgrade_to_version(&mut self, version: &VersionInfo, backup: bool) -> Result<()> {
+        let was_running = self.is_running().await?;
+        
+        // 如果服务正在运行，先停止
+        if was_running {
+            println!("正在停止服务...");
+            self.stop().await?;
+        }
+        
+        // 备份当前版本
+        let backup_path = if backup {
+            Some(self.backup_current_binary()?)
+        } else {
+            None
+        };
+        
+        // 下载并安装新版本
+        match self.download_and_install(version).await {
+            Ok(_) => {
+                println!("升级到版本 {} 成功", version.version);
+                
+                // 如果之前服务在运行，重新启动
+                if was_running {
+                    println!("正在重新启动服务...");
+                    if let Err(e) = self.start().await {
+                        // 启动失败，尝试回滚
+                        if let Some(backup_path) = backup_path {
+                            println!("启动失败，正在回滚到备份版本...");
+                            if let Err(rollback_err) = fs::copy(&backup_path, &self.config.binary_path) {
+                                return Err(MihomoError::ServiceError(
+                                    format!("升级失败且回滚失败: 启动错误: {}, 回滚错误: {}", e, rollback_err)
+                                ));
+                            }
+                            self.start().await?;
+                            println!("已回滚到备份版本并重新启动服务");
+                        }
+                        return Err(e);
+                    }
+                }
+                
+                Ok(())
+            }
+            Err(e) => {
+                // 下载失败，如果之前服务在运行，重新启动原版本
+                if was_running {
+                    println!("升级失败，正在重新启动原服务...");
+                    let _ = self.start().await;
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// 升级到最新版本
+    /// 
+    /// # Arguments
+    /// 
+    /// * `backup` - 是否备份当前版本
+    /// 
+    /// # Returns
+    /// 
+    /// 返回升级结果
+    pub async fn upgrade_to_latest(&mut self, backup: bool) -> Result<()> {
+        let versions = self.get_available_versions().await?;
+        let latest = versions.into_iter()
+            .find(|v| !v.prerelease)
+            .ok_or_else(|| MihomoError::ServiceError("未找到稳定版本".to_string()))?;
+        
+        // 检查是否已是最新版本
+        if let Ok(current_version) = self.get_current_version().await {
+            if current_version.contains(&latest.version) {
+                println!("当前已是最新版本: {}", latest.version);
+                return Ok(());
+            }
+        }
+        
+        self.upgrade_to_version(&latest, backup).await
+    }
+
+    /// 卸载mihomo-rs
+    /// 
+    /// 完全清理所有相关文件和配置
+    /// 
+    /// # Arguments
+    /// 
+    /// * `keep_config` - 是否保留配置文件
+    /// 
+    /// # Returns
+    /// 
+    /// 返回卸载结果
+    pub async fn uninstall(&mut self, keep_config: bool) -> Result<()> {
+        // 停止服务
+        if self.is_running().await? {
+            println!("正在停止服务...");
+            self.stop().await?;
+        }
+        
+        let config_dir = get_app_config_dir()?;
+        
+        // 删除二进制文件
+        if self.config.binary_path.exists() {
+            fs::remove_file(&self.config.binary_path)
+                .map_err(|e| MihomoError::IoError(format!("删除二进制文件失败: {}", e)))?;
+            println!("已删除二进制文件: {:?}", self.config.binary_path);
+        }
+        
+        // 删除PID文件
+        let _ = Self::remove_pid_file();
+        
+        // 删除备份目录
+        let backup_dir = config_dir.join("backups");
+        if backup_dir.exists() {
+            fs::remove_dir_all(&backup_dir)
+                .map_err(|e| MihomoError::IoError(format!("删除备份目录失败: {}", e)))?;
+            println!("已删除备份目录: {:?}", backup_dir);
+        }
+        
+        if !keep_config {
+            // 删除配置文件
+            if let Some(config_path) = &self.config.config_path {
+                if config_path.exists() {
+                    fs::remove_file(config_path)
+                        .map_err(|e| MihomoError::IoError(format!("删除配置文件失败: {}", e)))?;
+                    println!("已删除配置文件: {:?}", config_path);
+                }
+            }
+            
+            // 删除整个配置目录（如果为空）
+            if config_dir.exists() {
+                match fs::remove_dir(&config_dir) {
+                    Ok(_) => println!("已删除配置目录: {:?}", config_dir),
+                    Err(_) => println!("配置目录不为空，保留: {:?}", config_dir),
+                }
+            }
+        } else {
+            println!("已保留配置文件");
+        }
+        
+        println!("mihomo-rs 卸载完成");
+        Ok(())
+    }
+
+    /// 清理备份文件
+    /// 
+    /// # Arguments
+    /// 
+    /// * `keep_count` - 保留的备份文件数量
+    /// 
+    /// # Returns
+    /// 
+    /// 返回清理结果
+    pub fn cleanup_backups(&self, keep_count: usize) -> Result<()> {
+        let config_dir = get_app_config_dir()?;
+        let backup_dir = config_dir.join("backups");
+        
+        if !backup_dir.exists() {
+            return Ok(());
+        }
+        
+        let mut backup_files: Vec<_> = fs::read_dir(&backup_dir)
+            .map_err(|e| MihomoError::IoError(format!("读取备份目录失败: {}", e)))?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_file() && path.file_name()?.to_str()?.starts_with("mihomo.backup.") {
+                    let metadata = entry.metadata().ok()?;
+                    let modified = metadata.modified().ok()?;
+                    Some((path, modified))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        // 按修改时间排序，最新的在前
+        backup_files.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        // 删除多余的备份文件
+        for (path, _) in backup_files.into_iter().skip(keep_count) {
+            if let Err(e) = fs::remove_file(&path) {
+                println!("删除备份文件失败: {:?}, 错误: {}", path, e);
+            } else {
+                println!("已删除旧备份文件: {:?}", path);
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 
