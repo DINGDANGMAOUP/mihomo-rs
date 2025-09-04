@@ -61,10 +61,8 @@ async fn auto_proxy_selection(client: &MihomoClient) -> Result<(), Box<dyn std::
 
     // 获取所有代理组
     let groups = proxy_manager.get_proxy_groups().await?;
-    let group_data: Vec<(String, ProxyGroup)> = groups
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    let group_data: Vec<(String, ProxyGroup)> =
+        groups.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
     for (group_name, group) in group_data {
         if group.group_type == ProxyGroupType::Selector

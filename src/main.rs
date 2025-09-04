@@ -4,13 +4,8 @@
 
 use clap::{Parser, Subcommand};
 use mihomo_rs::{
-    client::MihomoClient,
-    config::ConfigManager,
-    init_logger,
-    monitor::Monitor,
-    proxy::ProxyManager,
-    rules::RuleEngine,
-    service::ServiceManager,
+    client::MihomoClient, config::ConfigManager, init_logger, monitor::Monitor,
+    proxy::ProxyManager, rules::RuleEngine, service::ServiceManager,
 };
 use std::time::Duration;
 

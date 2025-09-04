@@ -1,12 +1,7 @@
 //! 性能测试模块
 //! 测试SDK在不同负载下的性能表现
 
-use mihomo_rs::{
-    client::MihomoClient,
-    monitor::Monitor,
-    proxy::ProxyManager,
-    rules::RuleEngine,
-};
+use mihomo_rs::{client::MihomoClient, monitor::Monitor, proxy::ProxyManager, rules::RuleEngine};
 use std::time::{Duration, Instant};
 use tokio::test;
 use tokio::time::sleep;
