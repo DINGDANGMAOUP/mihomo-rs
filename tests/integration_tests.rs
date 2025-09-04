@@ -39,10 +39,13 @@ async fn test_proxy_manager() {
     };
     
     let client = MihomoClient::new(&base_url, None).unwrap();
-    let mut proxy_manager = ProxyManager::new(client);
     
     // 测试代理获取
+    let mut proxy_manager = ProxyManager::new(client.clone());
     let proxies_result = proxy_manager.get_proxies().await;
+    
+    let mut proxy_manager2 = ProxyManager::new(client);
+    let groups_result = proxy_manager2.get_proxy_groups().await;
     
     match test_mode {
         TestMode::Real(_) => {
@@ -61,11 +64,13 @@ async fn test_proxy_manager() {
         TestMode::Mock(_) => {
             // 模拟服务测试：验证数据解析和类型安全
             assert!(proxies_result.is_ok(), "模拟服务测试应该成功");
+            assert!(groups_result.is_ok(), "模拟服务组测试应该成功");
+            
             let proxies = proxies_result.unwrap();
-            assert!(!proxies.is_empty(), "应该返回模拟代理数据");
+            let groups = groups_result.unwrap();
             
             // 验证特定的模拟数据
-            assert!(proxies.contains_key("GLOBAL"), "应该包含GLOBAL代理组");
+            assert!(groups.contains_key("GLOBAL"), "应该包含GLOBAL代理组");
             assert!(proxies.contains_key("DIRECT"), "应该包含DIRECT代理");
             
             println!("模拟服务测试：代理解析验证通过");
@@ -110,6 +115,17 @@ async fn test_rule_engine() {
         },
         TestMode::Mock(_) => {
             // 模拟服务测试：验证数据解析和类型安全
+            match &rules {
+                Ok(rules_data) => {
+                     println!("规则获取成功，共{}条规则", rules_data.len());
+                     for rule in rules_data.iter() {
+                         println!("规则: {:?} {} -> {}", rule.rule_type, rule.payload, rule.proxy);
+                     }
+                 },
+                Err(e) => {
+                    println!("规则获取失败: {}", e);
+                }
+            }
             assert!(rules.is_ok(), "模拟服务测试应该成功");
             let rules = rules.unwrap();
             assert!(!rules.is_empty(), "应该返回模拟规则数据");

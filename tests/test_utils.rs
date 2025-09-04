@@ -91,9 +91,21 @@ pub async fn create_mock_server() -> MockServer {
             .set_body_json(serde_json::json!({
                 "rules": [
                     {
-                        "type": "Match",
+                        "type": "DOMAIN",
                         "payload": "example.com",
                         "proxy": "DIRECT",
+                        "size": 0
+                    },
+                    {
+                        "type": "IP-CIDR",
+                        "payload": "192.168.1.0/24",
+                        "proxy": "DIRECT",
+                        "size": 0
+                    },
+                    {
+                        "type": "Match",
+                        "payload": "",
+                        "proxy": "GLOBAL",
                         "size": 0
                     }
                 ]

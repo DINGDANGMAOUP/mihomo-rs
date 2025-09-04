@@ -2,12 +2,15 @@
 name = "mihomo-rs"
 version = "0.1.0"
 edition = "2021"
-authors = ["mihomo-rs contributors"]
-description = "A Rust SDK for mihomo proxy management"
+authors = ["dingdangmaoup"]
+description = "A Rust SDK and CLI tool for mihomo proxy management with service lifecycle management, configuration handling, and real-time monitoring"
 license = "MIT"
-repository = "https://github.com/mihomo-rs/mihomo-rs"
-keywords = ["proxy", "mihomo", "clash", "network"]
-categories = ["network-programming", "api-bindings"]
+repository = "https://github.com/DINGDANGMAOUP/mihomo-rs"
+homepage = "https://github.com/DINGDANGMAOUP/mihomo-rs"
+documentation = "https://docs.rs/mihomo-rs"
+readme = "README.md"
+keywords = ["proxy", "mihomo", "clash", "network", "cli"]
+categories = ["network-programming", "api-bindings", "command-line-utilities"]
 
 [lib]
 name = "mihomo_rs"

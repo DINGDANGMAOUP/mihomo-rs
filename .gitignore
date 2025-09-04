@@ -1,2 +1,43 @@
+# Rust 编译输出
 /target
+/Cargo.lock
+
+# IDE 文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统文件
 .DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# 测试输出
+/coverage
+
+# 本地配置
+.env
+.env.local
+
+# 备份文件
+*.bak
+*.backup
+
+# 运行时文件
+*.pid
+
+# 文档生成
+/docs/book
+/docs/target
+
+# 发布相关
+/dist
+/release
