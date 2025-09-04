@@ -40,7 +40,5 @@ anyhow = "1.0"
 sysinfo = "0.29"
 
 [dev-dependencies]
-mockito = "1.2"
 tempfile = "3.8"
-tokio-test = "0.4"
 wiremock = "0.5"
