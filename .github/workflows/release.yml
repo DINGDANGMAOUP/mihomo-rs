@@ -94,10 +94,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          mihomo-rs-linux-x64/mihomo-rs-linux-x64
-          mihomo-rs-windows-x64.exe/mihomo-rs-windows-x64.exe
-          mihomo-rs-macos-x64/mihomo-rs-macos-x64
-          mihomo-rs-macos-arm64/mihomo-rs-macos-arm64
+          mihomo-rs-linux-x64
+          mihomo-rs-windows-x64.exe
+          mihomo-rs-macos-x64
+          mihomo-rs-macos-arm64
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
