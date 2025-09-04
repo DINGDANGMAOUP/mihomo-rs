@@ -1,5 +1,7 @@
 name: Release
 permissions:
+  contents: write
+  discussions: write
   
 on:
   push:
