@@ -9,6 +9,7 @@ use mihomo_rs::{
     proxy::ProxyManager,
     monitor::Monitor,
     rules::RuleEngine,
+    service::{ServiceManager, ServiceConfig},
     init_logger,
 };
 use std::time::Duration;
@@ -66,6 +67,11 @@ enum Commands {
         #[command(subcommand)]
         action: Option<ConnectionAction>,
     },
+    /// 服务管理
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
 }
 
 /// 代理操作
@@ -119,6 +125,42 @@ enum ConnectionAction {
     CloseAll,
 }
 
+/// 服务操作
+#[derive(Subcommand)]
+enum ServiceAction {
+    /// 初始化配置目录
+    Init,
+    /// 启动服务
+    Start,
+    /// 停止服务
+    Stop,
+    /// 重启服务
+    Restart,
+    /// 服务状态
+    Status,
+    /// 版本管理
+    Version {
+        #[command(subcommand)]
+        action: VersionAction,
+    },
+}
+
+/// 版本操作
+#[derive(Subcommand)]
+enum VersionAction {
+    /// 列出可用版本
+    List,
+    /// 下载指定版本
+    Download {
+        /// 版本号
+        version: String,
+    },
+    /// 安装最新版本
+    Latest,
+    /// 获取当前版本
+    Current,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -143,6 +185,94 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Commands::Rules => handle_rules(&client).await?,
         Commands::Connections { action } => handle_connections(&client, action).await?,
+        Commands::Service { action } => handle_service(&client, action).await?,
+    }
+    
+    Ok(())
+}
+
+/// 处理版本命令
+async fn handle_version(
+    service_manager: &mut ServiceManager,
+    action: VersionAction,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        VersionAction::List => {
+            println!("📋 获取可用版本列表...");
+            let versions = service_manager.get_available_versions().await?;
+            println!("可用版本:");
+            for version in versions {
+                 println!("  📦 {} - {}", version.version, version.description);
+             }
+        },
+        VersionAction::Download { version } => {
+             println!("⬇️ 下载版本 {}...", version);
+             // 这里需要先获取版本信息，然后下载
+             let versions = service_manager.get_available_versions().await?;
+             if let Some(version_info) = versions.iter().find(|v| v.version == version) {
+                  service_manager.download_and_install(version_info).await?;
+                 println!("✅ 版本 {} 下载并安装成功", version);
+             } else {
+                 println!("❌ 未找到版本: {}", version);
+             }
+         },
+        VersionAction::Latest => {
+            println!("⬇️ 下载并安装最新版本...");
+            service_manager.download_latest().await?;
+            println!("✅ 最新版本下载并安装成功");
+        },
+        VersionAction::Current => {
+            println!("🔍 获取当前版本...");
+            match service_manager.get_current_version().await {
+                Ok(version) => println!("📦 当前版本: {}", version),
+                Err(_) => println!("❌ 未找到当前版本信息"),
+            }
+        },
+    }
+    
+    Ok(())
+}
+
+/// 处理服务命令
+async fn handle_service(
+    _client: &MihomoClient,
+    action: ServiceAction,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        ServiceAction::Init => {
+            println!("🔧 初始化配置目录...");
+            let config_dir = ServiceManager::init_app_config()?;
+            println!("✅ 配置目录已创建: {}", config_dir.display());
+            println!("📝 默认配置文件已生成: {}", config_dir.join("config.yaml").display());
+        },
+        ServiceAction::Start => {
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            println!("🚀 启动服务...");
+            service_manager.start().await?;
+            println!("✅ 服务启动成功");
+        },
+        ServiceAction::Stop => {
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            println!("🛑 停止服务...");
+            service_manager.stop().await?;
+            println!("✅ 服务已停止");
+        },
+        ServiceAction::Restart => {
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            println!("🔄 重启服务...");
+            service_manager.restart().await?;
+            println!("✅ 服务重启成功");
+        },
+        ServiceAction::Status => {
+            let service_manager = ServiceManager::new_with_defaults()?;
+            println!("🔍 获取服务状态...");
+            let status = service_manager.get_status().await?;
+            println!("📊 服务状态: {:?}", status);
+        },
+        ServiceAction::Version { action } => {
+            let mut service_manager = ServiceManager::new_with_defaults()?;
+            handle_version(&mut service_manager, action).await?;
+        },
     }
     
     Ok(())

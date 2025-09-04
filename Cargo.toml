@@ -28,13 +28,16 @@ env_logger = "0.10"
 url = "2.4"
 regex = "1.10"
 base64 = "0.21"
+flate2 = "1.0"
 clap = { version = "4.4", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
+sysinfo = "0.29"
 
 [dev-dependencies]
 mockito = "1.2"
+tempfile = "3.8"
 tokio-test = "0.4"
 wiremock = "0.5"

@@ -67,6 +67,22 @@ pub enum MihomoError {
     #[error("Internal error: {0}")]
     Internal(String),
 
+    /// 服务错误
+    #[error("服务错误: {0}")]
+    ServiceError(String),
+
+    /// 下载错误
+    #[error("下载错误: {0}")]
+    DownloadError(String),
+
+    /// 版本未找到
+    #[error("版本未找到: {0}")]
+    VersionNotFound(String),
+
+    /// 不支持的平台
+    #[error("不支持的平台: {0}")]
+    UnsupportedPlatform(String),
+
     /// 其他错误
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
@@ -119,6 +135,26 @@ impl MihomoError {
     /// 创建内部错误
     pub fn internal<S: Into<String>>(msg: S) -> Self {
         MihomoError::Internal(msg.into())
+    }
+
+    /// 创建服务错误
+    pub fn service_error<S: Into<String>>(msg: S) -> Self {
+        MihomoError::ServiceError(msg.into())
+    }
+
+    /// 创建下载错误
+    pub fn download_error<S: Into<String>>(msg: S) -> Self {
+        MihomoError::DownloadError(msg.into())
+    }
+
+    /// 创建版本未找到错误
+    pub fn version_not_found<S: Into<String>>(msg: S) -> Self {
+        MihomoError::VersionNotFound(msg.into())
+    }
+
+    /// 创建不支持的平台错误
+    pub fn unsupported_platform<S: Into<String>>(msg: S) -> Self {
+        MihomoError::UnsupportedPlatform(msg.into())
     }
 }
 

@@ -2,6 +2,7 @@
 //!
 //! 演示如何使用 mihomo-rs SDK 的基本功能
 
+use std::alloc::System;
 use mihomo_rs::{
     client::MihomoClient,
     config::ConfigManager,

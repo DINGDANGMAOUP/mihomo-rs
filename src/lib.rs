@@ -11,11 +11,13 @@ pub mod error;
 pub mod types;
 pub mod client;
 pub mod utils;
+pub mod service;
 
 // 重新导出主要的公共接口
 pub use client::MihomoClient;
 pub use config::{Config, ProxyConfig, RuleConfig};
 pub use error::{MihomoError, Result};
+pub use service::{ServiceManager, ServiceConfig, ServiceStatus, VersionInfo};
 pub use types::*;
 
 /// SDK 版本信息

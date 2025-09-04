@@ -381,7 +381,7 @@ pub mod validation_utils {
         // 根据代理类型进行特定验证
         match proxy_type {
             ProxyType::Http | ProxyType::Https => {
-                // HTTP 代理通常使用标准端口
+                // HTTP 代理通常使用标准端口 设置一个默认
                 if port != 80 && port != 8080 && port != 3128 {
                     log::warn!("Unusual port {} for HTTP proxy", port);
                 }

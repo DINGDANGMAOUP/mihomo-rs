@@ -19,7 +19,6 @@ use tokio::time;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     mihomo_rs::init_logger();
-    
     println!("=== Mihomo SDK 高级使用示例 ===");
     
     // 创建客户端
