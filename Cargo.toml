@@ -37,7 +37,7 @@ tokio = { version = "1.0", features = ["full"] }
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
-sysinfo = "0.29"
+sysinfo = "0.37"
 
 [dev-dependencies]
 tempfile = "3.8"
