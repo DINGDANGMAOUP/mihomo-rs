@@ -166,21 +166,28 @@ impl MihomoClient {
 
     /// 获取所有代理节点
     pub async fn proxies(&self) -> Result<HashMap<String, ProxyNode>> {
-        let response: HashMap<String, HashMap<String, ProxyNode>> = self.get("/proxies").await?;
-        Ok(response.get("proxies").cloned().unwrap_or_default())
+        let response: HashMap<String, HashMap<String, ProxyItem>> = self.get("/proxies").await?;
+        let proxies = response.get("proxies").cloned().unwrap_or_default();
+        let mut result = HashMap::new();
+        for (name, item) in proxies {
+            if let Some(node) = item.to_proxy_node() {
+                result.insert(name, node);
+            }
+        }
+        Ok(result)
     }
 
     /// 获取代理组信息
     pub async fn proxy_groups(&self) -> Result<HashMap<String, ProxyGroup>> {
-        let proxies = self.proxies().await?;
-        let groups: HashMap<String, ProxyGroup> = proxies
-            .into_iter()
-            .filter_map(|(_name, _node)| {
-                // 这里需要根据实际 API 响应结构调整
-                None // 临时返回 None，实际实现需要根据 API 文档调整
-            })
-            .collect();
-        Ok(groups)
+        let response: HashMap<String, HashMap<String, ProxyItem>> = self.get("/proxies").await?;
+        let proxies = response.get("proxies").cloned().unwrap_or_default();
+        let mut result = HashMap::new();
+        for (name, item) in proxies {
+            if let Some(group) = item.to_proxy_group() {
+                result.insert(name, group);
+            }
+        }
+        Ok(result)
     }
 
     /// 切换代理组选择

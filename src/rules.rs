@@ -440,7 +440,7 @@ mod tests {
             rule_type: RuleType::DomainSuffix,
             payload: "google.com".to_string(),
             proxy: "Proxy".to_string(),
-            size: None,
+            size: 0,
         };
         
         assert!(engine.match_domain_suffix(&rule, "www.google.com").unwrap());

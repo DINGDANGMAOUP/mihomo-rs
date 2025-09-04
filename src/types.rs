@@ -30,9 +30,14 @@ pub enum ProxyType {
     Hysteria,
     /// WireGuard 代理
     Wireguard,
+    /// 兼容模式代理
+    #[serde(rename = "Compatible")]
+    Compatible,
     /// 直连
+    #[serde(rename = "Direct")]
     Direct,
     /// 拒绝连接
+    #[serde(rename = "Reject")]
     Reject,
 }
 
@@ -45,9 +50,11 @@ pub struct ProxyNode {
     #[serde(rename = "type")]
     pub proxy_type: ProxyType,
     /// 服务器地址
-    pub server: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     /// 服务器端口
-    pub port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
     /// 是否启用UDP
     #[serde(default)]
     pub udp: bool,
@@ -57,83 +64,313 @@ pub struct ProxyNode {
     /// 历史延迟记录
     #[serde(default)]
     pub history: Vec<DelayHistory>,
-    /// 额外配置参数
+    /// 是否存活
+    #[serde(default)]
+    pub alive: bool,
+    /// 额外配置
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+    /// 拨号代理
+    #[serde(rename = "dialer-proxy", default)]
+    pub dialer_proxy: String,
+    /// 接口
+    #[serde(default)]
+    pub interface: String,
+    /// MPTCP支持
+    #[serde(default)]
+    pub mptcp: bool,
+    /// 路由标记
+    #[serde(rename = "routing-mark", default)]
+    pub routing_mark: u32,
+    /// SMUX支持
+    #[serde(default)]
+    pub smux: bool,
+    /// TCP Fast Open
+    #[serde(default)]
+    pub tfo: bool,
+    /// UoT支持
+    #[serde(default)]
+    pub uot: bool,
+    /// XUDP支持
+    #[serde(default)]
+    pub xudp: bool,
+    /// ID
+    #[serde(default)]
+    pub id: String,
 }
 
 /// 延迟历史记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelayHistory {
-    /// 延迟时间（毫秒）
+    /// 延迟值（毫秒）
     pub delay: u32,
-    /// 测试时间
-    pub time: DateTime<Utc>,
+    /// 测试时间戳
+    #[serde(alias = "timestamp", skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
 }
 
 /// 代理组信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyGroup {
-    /// 组名称
+    /// 代理组名称
     pub name: String,
-    /// 组类型
+    /// 代理组类型
     #[serde(rename = "type")]
     pub group_type: ProxyGroupType,
     /// 当前选中的代理
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub now: Option<String>,
-    /// 组内代理列表
+    pub now: String,
+    /// 所有可用代理
     pub all: Vec<String>,
-    /// 历史记录
+    /// 历史延迟记录
     #[serde(default)]
     pub history: Vec<DelayHistory>,
+    /// 是否隐藏
+    #[serde(default)]
+    pub hidden: bool,
+    /// 图标
+    #[serde(default)]
+    pub icon: String,
+    /// 是否存活
+    #[serde(default)]
+    pub alive: bool,
+    /// 拨号代理
+    #[serde(rename = "dialer-proxy", default)]
+    pub dialer_proxy: String,
+    /// 额外信息
+    #[serde(default)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+    /// 接口
+    #[serde(default)]
+    pub interface: String,
+    /// MPTCP支持
+    #[serde(default)]
+    pub mptcp: bool,
+    /// 路由标记
+    #[serde(rename = "routing-mark", default)]
+    pub routing_mark: u32,
+    /// SMUX支持
+    #[serde(default)]
+    pub smux: bool,
+    /// 测试URL
+    #[serde(rename = "testUrl", default)]
+    pub test_url: String,
+    /// TCP Fast Open
+    #[serde(default)]
+    pub tfo: bool,
+    /// UDP支持
+    #[serde(default)]
+    pub udp: bool,
+    /// UoT支持
+    #[serde(default)]
+    pub uot: bool,
+    /// XUDP支持
+    #[serde(default)]
+    pub xudp: bool,
+}
+
+/// 通用代理项（可能是代理节点或代理组）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyItem {
+    /// 名称
+    pub name: String,
+    /// 类型
+    #[serde(rename = "type")]
+    pub item_type: String,
+    /// 是否存活
+    #[serde(default)]
+    pub alive: bool,
+    /// 历史延迟记录
+    #[serde(default)]
+    pub history: Vec<DelayHistory>,
+    /// 拨号代理
+    #[serde(rename = "dialer-proxy", default)]
+    pub dialer_proxy: String,
+    /// 接口
+    #[serde(default)]
+    pub interface: String,
+    /// MPTCP支持
+    #[serde(default)]
+    pub mptcp: bool,
+    /// 路由标记
+    #[serde(rename = "routing-mark", default)]
+    pub routing_mark: u32,
+    /// SMUX支持
+    #[serde(default)]
+    pub smux: bool,
+    /// TCP Fast Open
+    #[serde(default)]
+    pub tfo: bool,
+    /// UDP支持
+    #[serde(default)]
+    pub udp: bool,
+    /// UoT支持
+    #[serde(default)]
+    pub uot: bool,
+    /// XUDP支持
+    #[serde(default)]
+    pub xudp: bool,
+    /// ID（代理节点特有）
+    #[serde(default)]
+    pub id: String,
+    /// 服务器地址（代理节点特有）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    /// 端口号（代理节点特有）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// 延迟信息（代理节点特有）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay: Option<u32>,
+    /// 当前选中的代理（代理组特有）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub now: Option<String>,
+    /// 所有可用代理（代理组特有）
+    #[serde(default)]
+    pub all: Vec<String>,
+    /// 是否隐藏（代理组特有）
+    #[serde(default)]
+    pub hidden: bool,
+    /// 图标（代理组特有）
+    #[serde(default)]
+    pub icon: String,
+    /// 测试URL（代理组特有）
+    #[serde(rename = "testUrl", default)]
+    pub test_url: String,
+    /// 额外配置
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl ProxyItem {
+    /// 判断是否为代理组（通过all字段是否为空来判断）
+    pub fn is_group(&self) -> bool {
+        !self.all.is_empty()
+    }
+    
+    /// 判断是否为代理节点
+    pub fn is_node(&self) -> bool {
+        self.all.is_empty()
+    }
+    
+    /// 转换为代理节点
+    pub fn to_proxy_node(&self) -> Option<ProxyNode> {
+        if self.is_node() {
+            Some(ProxyNode {
+                name: self.name.clone(),
+                proxy_type: serde_json::from_str(&format!("\"{}\"", self.item_type)).ok()?,
+                server: self.server.clone(),
+                port: self.port,
+                udp: self.udp,
+                delay: self.delay,
+                history: self.history.clone(),
+                alive: self.alive,
+                dialer_proxy: self.dialer_proxy.clone(),
+                interface: self.interface.clone(),
+                mptcp: self.mptcp,
+                routing_mark: self.routing_mark,
+                smux: self.smux,
+                tfo: self.tfo,
+                uot: self.uot,
+                xudp: self.xudp,
+                id: self.id.clone(),
+                extra: self.extra.clone(),
+            })
+        } else {
+            None
+        }
+    }
+    
+    /// 转换为代理组
+    pub fn to_proxy_group(&self) -> Option<ProxyGroup> {
+        if self.is_group() {
+            Some(ProxyGroup {
+                name: self.name.clone(),
+                group_type: serde_json::from_str(&format!("\"{}\"", self.item_type)).ok()?,
+                now: self.now.clone().unwrap_or_default(),
+                all: self.all.clone(),
+                history: self.history.clone(),
+                hidden: self.hidden,
+                icon: self.icon.clone(),
+                alive: self.alive,
+                dialer_proxy: self.dialer_proxy.clone(),
+                extra: self.extra.clone(),
+                interface: self.interface.clone(),
+                mptcp: self.mptcp,
+                routing_mark: self.routing_mark,
+                smux: self.smux,
+                test_url: self.test_url.clone(),
+                tfo: self.tfo,
+                udp: self.udp,
+                uot: self.uot,
+                xudp: self.xudp,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// 代理组类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "PascalCase")]
 pub enum ProxyGroupType {
-    /// 选择器组
+    /// 选择器
+    #[serde(rename = "Selector")]
     Selector,
-    /// URL 测试组
+    /// URL测试
+    #[serde(rename = "URLTest")]
     UrlTest,
-    /// 故障转移组
+    /// 故障转移
+    #[serde(rename = "Fallback")]
     Fallback,
-    /// 负载均衡组
+    /// 负载均衡
+    #[serde(rename = "LoadBalance")]
     LoadBalance,
-    /// 中继组
+    /// 中继
+    #[serde(rename = "Relay")]
     Relay,
 }
 
 /// 规则类型枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "UPPERCASE")]
 pub enum RuleType {
     /// 域名规则
+    #[serde(rename = "DOMAIN")]
     Domain,
     /// 域名后缀规则
+    #[serde(rename = "DOMAIN-SUFFIX")]
     DomainSuffix,
     /// 域名关键字规则
+    #[serde(rename = "DOMAIN-KEYWORD")]
     DomainKeyword,
     /// GEOIP 规则
+    #[serde(rename = "GEOIP")]
     Geoip,
     /// IP-CIDR 规则
+    #[serde(rename = "IP-CIDR")]
     IpCidr,
     /// SRC-IP-CIDR 规则
+    #[serde(rename = "SRC-IP-CIDR")]
     SrcIpCidr,
     /// SRC-PORT 规则
+    #[serde(rename = "SRC-PORT")]
     SrcPort,
     /// DST-PORT 规则
+    #[serde(rename = "DST-PORT")]
     DstPort,
     /// 进程名规则
+    #[serde(rename = "PROCESS-NAME")]
     ProcessName,
     /// 进程路径规则
+    #[serde(rename = "PROCESS-PATH")]
     ProcessPath,
     /// 脚本规则
+    #[serde(rename = "SCRIPT")]
     Script,
     /// 规则集规则
+    #[serde(rename = "RULE-SET")]
     RuleSet,
     /// 匹配所有
+    #[serde(rename = "Match")]
     Match,
 }
 
@@ -148,8 +385,7 @@ pub struct Rule {
     /// 目标代理
     pub proxy: String,
     /// 规则大小（字节）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<u64>,
+    pub size: i64,
 }
 
 /// 连接信息
@@ -233,8 +469,18 @@ pub struct Version {
     /// 版本号
     pub version: String,
     /// 高级版本
+    #[serde(default)]
     pub premium: bool,
     /// 元数据
+    pub meta: bool,
+}
+
+/// 系统信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    /// 版本信息
+    pub version: String,
+    /// 元数据标识
     pub meta: bool,
 }
 
@@ -269,15 +515,27 @@ mod tests {
         let node = ProxyNode {
             name: "test-proxy".to_string(),
             proxy_type: ProxyType::Http,
-            server: "127.0.0.1".to_string(),
-            port: 8080,
+            server: Some("127.0.0.1".to_string()),
+            port: Some(8080),
             udp: false,
             delay: Some(100),
             history: vec![],
+            alive: false,
+            dialer_proxy: String::new(),
+            interface: String::new(),
+            mptcp: false,
+            routing_mark: 0,
+            smux: false,
+            tfo: false,
+            uot: false,
+            xudp: false,
+            id: String::new(),
             extra: HashMap::new(),
         };
         
         assert_eq!(node.name, "test-proxy");
         assert_eq!(node.proxy_type, ProxyType::Http);
+        assert_eq!(node.server, Some("127.0.0.1".to_string()));
+        assert_eq!(node.port, Some(8080));
     }
 }

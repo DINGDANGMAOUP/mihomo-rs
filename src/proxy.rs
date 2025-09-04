@@ -155,7 +155,7 @@ impl ProxyManager {
         
         // 更新缓存中的当前选择
         if let Some(group) = self.group_cache.get_mut(group_name) {
-            group.now = Some(proxy_name.to_string());
+            group.now = proxy_name.to_string();
         }
         
         log::info!("Switched proxy group '{}' to '{}'", group_name, proxy_name);

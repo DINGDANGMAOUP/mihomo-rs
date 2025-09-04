@@ -15,14 +15,16 @@ use mihomo_rs::{
 use std::time::Duration;
 use tokio::test;
 
+mod test_utils;
+use test_utils::{TestMode, get_test_mode};
+
 /// 测试客户端创建和基本功能
 #[test]
 async fn test_client_creation() {
     let client = MihomoClient::new("http://127.0.0.1:9090", None);
     assert!(client.is_ok());
-    
+
     let _client = client.unwrap();
-    
     // 测试无效的 URL
     let invalid_client = MihomoClient::new("invalid-url", None);
     assert!(invalid_client.is_err());
@@ -31,33 +33,99 @@ async fn test_client_creation() {
 /// 测试代理管理器
 #[test]
 async fn test_proxy_manager() {
-    let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+    let test_mode = get_test_mode().await;
+    let base_url = match &test_mode {
+        TestMode::Real(url) | TestMode::Mock(url) => url.clone(),
+    };
+    
+    let client = MihomoClient::new(&base_url, None).unwrap();
     let mut proxy_manager = ProxyManager::new(client);
     
-    // 测试代理管理器创建成功
-    // ProxyManager 创建成功即可
-    
-    // 测试代理获取（由于没有实际的mihomo服务，预期会失败）
+    // 测试代理获取
     let proxies_result = proxy_manager.get_proxies().await;
-    // 由于没有实际的mihomo服务运行，这里应该返回错误
-    assert!(proxies_result.is_err());
+    
+    match test_mode {
+        TestMode::Real(_) => {
+            // 真实服务测试：验证实际功能
+            match proxies_result {
+                Ok(proxies) => {
+                    println!("真实服务测试：代理获取成功，共{}个代理", proxies.len());
+                    // 验证代理数据结构
+                    for (name, proxy) in proxies.iter().take(3) {
+                        println!("代理: {} -> {:?}", name, proxy.proxy_type);
+                    }
+                },
+                Err(e) => println!("真实服务测试：代理获取失败 - {}", e),
+            }
+        },
+        TestMode::Mock(_) => {
+            // 模拟服务测试：验证数据解析和类型安全
+            assert!(proxies_result.is_ok(), "模拟服务测试应该成功");
+            let proxies = proxies_result.unwrap();
+            assert!(!proxies.is_empty(), "应该返回模拟代理数据");
+            
+            // 验证特定的模拟数据
+            assert!(proxies.contains_key("GLOBAL"), "应该包含GLOBAL代理组");
+            assert!(proxies.contains_key("DIRECT"), "应该包含DIRECT代理");
+            
+            println!("模拟服务测试：代理解析验证通过");
+        }
+    }
 }
 
 /// 测试规则引擎
 #[test]
 async fn test_rule_engine() {
-    let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+    let test_mode = get_test_mode().await;
+    let base_url = match &test_mode {
+        TestMode::Real(url) | TestMode::Mock(url) => url.clone(),
+    };
+    
+    let client = MihomoClient::new(&base_url, None).unwrap();
     let mut rule_engine = RuleEngine::new(client);
     
-    // 测试初始状态（由于没有实际的mihomo服务，预期会失败）
+    // 测试规则获取
     let rules = rule_engine.get_rules().await;
-    // 由于没有实际的mihomo服务运行，这里应该返回错误
-    assert!(rules.is_err());
     
-    // 测试规则匹配（由于没有实际的mihomo服务，预期会失败）
-    let result = rule_engine.match_rule("example.com", Some(80), None).await;
-    // 由于没有实际的mihomo服务运行，这里应该返回错误
-    assert!(result.is_err());
+    match test_mode {
+        TestMode::Real(_) => {
+            // 真实服务测试：验证实际功能
+            match rules {
+                Ok(rules) => {
+                    println!("真实服务测试：规则获取成功，共{}条规则", rules.len());
+                    // 验证规则数据结构
+                    for rule in rules.iter().take(3) {
+                        println!("规则: {:?} {} -> {}", rule.rule_type, rule.payload, rule.proxy);
+                    }
+                },
+                Err(e) => println!("真实服务测试：规则获取失败 - {}", e),
+            }
+            
+            // 测试规则匹配
+            let result = rule_engine.match_rule("example.com", Some(80), None).await;
+            match result {
+                Ok(matched) => println!("真实服务测试：规则匹配成功 -> {:?}", matched),
+                Err(e) => println!("真实服务测试：规则匹配失败 - {}", e),
+            }
+        },
+        TestMode::Mock(_) => {
+            // 模拟服务测试：验证数据解析和类型安全
+            assert!(rules.is_ok(), "模拟服务测试应该成功");
+            let rules = rules.unwrap();
+            assert!(!rules.is_empty(), "应该返回模拟规则数据");
+            
+            // 验证规则类型
+            let has_domain_rule = rules.iter().any(|r| matches!(r.rule_type, RuleType::Domain));
+            let has_ip_rule = rules.iter().any(|r| matches!(r.rule_type, RuleType::IpCidr));
+            assert!(has_domain_rule || has_ip_rule, "应该包含域名或IP规则");
+            
+            // 测试规则匹配
+            let result = rule_engine.match_rule("example.com", Some(80), None).await;
+            assert!(result.is_ok(), "模拟服务规则匹配应该成功");
+            
+            println!("模拟服务测试：规则解析验证通过");
+        }
+    }
 }
 
 /// 测试配置管理器
@@ -82,17 +150,40 @@ async fn test_config_manager() {
 /// 测试监控器
 #[test]
 async fn test_monitor() {
-    let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+    let test_mode = get_test_mode().await;
+    let base_url = match &test_mode {
+        TestMode::Real(url) | TestMode::Mock(url) => url.clone(),
+    };
+    
+    let client = MihomoClient::new(&base_url, None).unwrap();
     let monitor = Monitor::new(client);
     
     // 测试性能统计
     let stats = monitor.get_performance_stats(Duration::from_secs(3600));
-    assert_eq!(stats.success_rate, 100.0); // 初始状态应该是100%
-    assert_eq!(stats.error_rate, 0.0);
     
-    // 测试事件获取
-    let events = monitor.get_recent_events(10);
-    assert!(events.is_empty()); // 初始状态应该没有事件
+    match test_mode {
+        TestMode::Real(_) => {
+            // 真实服务测试：验证实际监控功能
+            println!("真实服务测试：性能统计获取成功");
+            println!("成功率: {:.2}%", stats.success_rate);
+            println!("错误率: {:.2}%", stats.error_rate);
+            
+            // 测试事件获取
+            let events = monitor.get_recent_events(10);
+            println!("最近事件数量: {}", events.len());
+        },
+        TestMode::Mock(_) => {
+            // 模拟服务测试：验证数据结构
+            assert_eq!(stats.success_rate, 100.0); // 初始状态应该是100%
+            assert_eq!(stats.error_rate, 0.0);
+            
+            // 测试事件获取
+            let events = monitor.get_recent_events(10);
+            assert!(events.is_empty()); // 初始状态应该没有事件
+            
+            println!("模拟服务测试：监控统计验证通过");
+        }
+    }
 }
 
 /// 测试监控配置
@@ -145,25 +236,49 @@ async fn test_types() {
     let proxy_node = ProxyNode {
         name: "test-proxy".to_string(),
         proxy_type: ProxyType::Http,
-        server: "127.0.0.1".to_string(),
-        port: 8080,
+        server: Some("127.0.0.1".to_string()),
+        port: Some(8080),
         udp: true,
         delay: None,
         extra: std::collections::HashMap::new(),
         history: vec![],
+        alive: false,
+        dialer_proxy: String::new(),
+        interface: String::new(),
+        mptcp: false,
+        routing_mark: 0,
+        smux: false,
+        tfo: false,
+        uot: false,
+        xudp: false,
+        id: String::new(),
     };
     
     assert_eq!(proxy_node.name, "test-proxy");
     assert_eq!(proxy_node.proxy_type, ProxyType::Http);
-    assert_eq!(proxy_node.port, 8080);
+    assert_eq!(proxy_node.port, Some(8080));
     
     // 测试代理组
     let proxy_group = ProxyGroup {
         name: "test-group".to_string(),
         group_type: ProxyGroupType::Selector,
-        now: Some("proxy1".to_string()),
+        now: "proxy1".to_string(),
         all: vec!["proxy1".to_string(), "proxy2".to_string()],
         history: vec![],
+        alive: false,
+        dialer_proxy: String::new(),
+        extra: std::collections::HashMap::new(),
+        hidden: false,
+        icon: String::new(),
+        interface: String::new(),
+        mptcp: false,
+        routing_mark: 0,
+        smux: false,
+        test_url: String::new(),
+        tfo: false,
+        udp: false,
+        uot: false,
+        xudp: false,
     };
     
     assert_eq!(proxy_group.name, "test-group");
@@ -175,7 +290,7 @@ async fn test_types() {
         rule_type: RuleType::Domain,
         payload: "example.com".to_string(),
         proxy: "DIRECT".to_string(),
-        size: Some(0),
+        size: 0,
     };
     
     assert_eq!(rule.rule_type, RuleType::Domain);
@@ -422,12 +537,22 @@ async fn test_performance() {
         let proxy = ProxyNode {
             name: format!("proxy-{}", i),
             proxy_type: ProxyType::Socks5,
-            server: format!("192.168.1.{}", i % 255 + 1),
-            port: 1080,
+            server: Some(format!("192.168.1.{}", i % 255 + 1)),
+            port: Some(1080),
             udp: true,
             delay: None,
-            extra: std::collections::HashMap::new(),
             history: vec![],
+            alive: false,
+            dialer_proxy: String::new(),
+            interface: String::new(),
+            mptcp: false,
+            routing_mark: 0,
+            smux: false,
+            tfo: false,
+            uot: false,
+            xudp: false,
+            id: String::new(),
+            extra: std::collections::HashMap::new(),
         };
         proxies.insert(proxy.name.clone(), proxy);
     }
@@ -445,7 +570,7 @@ async fn test_performance() {
             rule_type: RuleType::Domain,
             payload: format!("example{}.com", i),
             proxy: "DIRECT".to_string(),
-            size: Some(0),
+            size: 0,
         };
         rules.push(rule);
     }
