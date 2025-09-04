@@ -354,8 +354,8 @@ cargo test --test performance_tests
 如果您遇到问题或有建议，请：
 
 1. 查看 [文档](https://docs.rs/mihomo-rs)
-2. 搜索 [已有 Issues](https://github.com/mihomo-rs/mihomo-rs/issues)
-3. 创建新的 [Issue](https://github.com/mihomo-rs/mihomo-rs/issues/new)
+2. 搜索 [已有 Issues](https://github.com/DINGDANGMAOUP/mihomo-rs/issues)
+3. 创建新的 [Issue](https://github.com/DINGDANMGOAUP/mihomo-rs/issues/new)
 
 ## 更新日志
 
