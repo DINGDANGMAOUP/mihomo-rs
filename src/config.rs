@@ -1,9 +1,9 @@
 //! 配置管理模块
-//! 
+//!
 //! 提供 mihomo 配置文件的解析、验证和管理功能。
 
 use crate::error::{MihomoError, Result};
-use crate::types::{ProxyNode, ProxyType, Rule, RuleType};
+use crate::types::ProxyType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -39,7 +39,10 @@ pub struct Config {
     #[serde(rename = "log-level", default = "default_log_level")]
     pub log_level: String,
     /// 外部控制器
-    #[serde(rename = "external-controller", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "external-controller",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub external_controller: Option<String>,
     /// 外部控制器密钥
     #[serde(rename = "secret", skip_serializing_if = "Option::is_none")]
@@ -158,16 +161,16 @@ impl ConfigManager {
     }
 
     /// 从文件加载配置
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `path` - 配置文件路径
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// use mihomo_rs::config::ConfigManager;
-    /// 
+    ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut manager = ConfigManager::new();
     /// manager.load_from_file("config.yaml")?;
@@ -178,12 +181,12 @@ impl ConfigManager {
         let path = path.as_ref();
         let content = fs::read_to_string(path)
             .map_err(|e| MihomoError::config(format!("Failed to read config file: {}", e)))?;
-        
+
         self.config = serde_yaml::from_str(&content)
             .map_err(|e| MihomoError::config(format!("Failed to parse config file: {}", e)))?;
-        
+
         self.config_path = Some(path.to_string_lossy().to_string());
-        
+
         self.validate_config()?;
         Ok(())
     }
@@ -192,7 +195,7 @@ impl ConfigManager {
     pub fn load_from_str(&mut self, content: &str) -> Result<()> {
         self.config = serde_yaml::from_str(content)
             .map_err(|e| MihomoError::config(format!("Failed to parse config: {}", e)))?;
-        
+
         self.validate_config()?;
         Ok(())
     }
@@ -201,10 +204,10 @@ impl ConfigManager {
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let content = serde_yaml::to_string(&self.config)
             .map_err(|e| MihomoError::config(format!("Failed to serialize config: {}", e)))?;
-        
+
         fs::write(path, content)
             .map_err(|e| MihomoError::config(format!("Failed to write config file: {}", e)))?;
-        
+
         Ok(())
     }
 
@@ -230,40 +233,42 @@ impl ConfigManager {
     /// 验证配置
     fn validate_config(&self) -> Result<()> {
         // 验证端口范围
-        if self.config.port == 0 || self.config.port > 65535 {
+        if self.config.port == 0 {
             return Err(MihomoError::config("Invalid port number"));
         }
-        
-        if self.config.socks_port == 0 || self.config.socks_port > 65535 {
+
+        if self.config.socks_port == 0 {
             return Err(MihomoError::config("Invalid SOCKS port number"));
         }
-        
+
         // 验证代理配置
         for proxy in &self.config.proxies {
             if proxy.name.is_empty() {
                 return Err(MihomoError::config("Proxy name cannot be empty"));
             }
-            
+
             if proxy.server.is_empty() {
                 return Err(MihomoError::config("Proxy server cannot be empty"));
             }
-            
-            if proxy.port == 0 || proxy.port > 65535 {
+
+            if proxy.port == 0 {
                 return Err(MihomoError::config("Invalid proxy port number"));
             }
         }
-        
+
         // 验证代理组配置
         for group in &self.config.proxy_groups {
             if group.name.is_empty() {
                 return Err(MihomoError::config("Proxy group name cannot be empty"));
             }
-            
+
             if group.proxies.is_empty() {
-                return Err(MihomoError::config("Proxy group must contain at least one proxy"));
+                return Err(MihomoError::config(
+                    "Proxy group must contain at least one proxy",
+                ));
             }
         }
-        
+
         Ok(())
     }
 
@@ -271,18 +276,25 @@ impl ConfigManager {
     pub fn add_proxy(&mut self, proxy: ProxyConfig) -> Result<()> {
         // 检查名称是否重复
         if self.config.proxies.iter().any(|p| p.name == proxy.name) {
-            return Err(MihomoError::config(format!("Proxy '{}' already exists", proxy.name)));
+            return Err(MihomoError::config(format!(
+                "Proxy '{}' already exists",
+                proxy.name
+            )));
         }
-        
+
         self.config.proxies.push(proxy);
         Ok(())
     }
 
     /// 删除代理
     pub fn remove_proxy(&mut self, name: &str) -> Result<()> {
-        let index = self.config.proxies.iter().position(|p| p.name == name)
+        let index = self
+            .config
+            .proxies
+            .iter()
+            .position(|p| p.name == name)
             .ok_or_else(|| MihomoError::config(format!("Proxy '{}' not found", name)))?;
-        
+
         self.config.proxies.remove(index);
         Ok(())
     }
@@ -290,19 +302,31 @@ impl ConfigManager {
     /// 添加代理组
     pub fn add_proxy_group(&mut self, group: ProxyGroupConfig) -> Result<()> {
         // 检查名称是否重复
-        if self.config.proxy_groups.iter().any(|g| g.name == group.name) {
-            return Err(MihomoError::config(format!("Proxy group '{}' already exists", group.name)));
+        if self
+            .config
+            .proxy_groups
+            .iter()
+            .any(|g| g.name == group.name)
+        {
+            return Err(MihomoError::config(format!(
+                "Proxy group '{}' already exists",
+                group.name
+            )));
         }
-        
+
         self.config.proxy_groups.push(group);
         Ok(())
     }
 
     /// 删除代理组
     pub fn remove_proxy_group(&mut self, name: &str) -> Result<()> {
-        let index = self.config.proxy_groups.iter().position(|g| g.name == name)
+        let index = self
+            .config
+            .proxy_groups
+            .iter()
+            .position(|g| g.name == name)
             .ok_or_else(|| MihomoError::config(format!("Proxy group '{}' not found", name)))?;
-        
+
         self.config.proxy_groups.remove(index);
         Ok(())
     }
@@ -407,7 +431,7 @@ mod tests {
             skip_cert_verify: false,
             extra: HashMap::new(),
         };
-        
+
         assert!(manager.add_proxy(proxy).is_ok());
         assert_eq!(manager.config().proxies.len(), 1);
     }

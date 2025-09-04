@@ -1,14 +1,14 @@
 //! 监控模块
-//! 
+//!
 //! 提供 mihomo 服务的运行状态监控、性能统计和健康检查功能。
 
 use crate::client::MihomoClient;
 use crate::error::{MihomoError, Result};
-use crate::types::{Connection, Memory, Traffic, Version};
+use crate::types::{Memory, Traffic, Version};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::time;
 
 /// 监控管理器
@@ -201,13 +201,13 @@ pub struct PerformanceStats {
 
 impl Monitor {
     /// 创建新的监控器
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `client` - mihomo 客户端实例
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// # use mihomo_rs::{client::MihomoClient, monitor::Monitor};
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -242,10 +242,15 @@ impl Monitor {
         }
 
         self.is_running = true;
-        self.add_event(EventType::SystemStart, EventLevel::Info, "Monitor started".to_string(), None);
-        
+        self.add_event(
+            EventType::SystemStart,
+            EventLevel::Info,
+            "Monitor started".to_string(),
+            None,
+        );
+
         log::info!("Monitor started with interval: {:?}", self.config.interval);
-        
+
         // 启动监控循环
         self.monitor_loop().await
     }
@@ -253,17 +258,22 @@ impl Monitor {
     /// 停止监控
     pub fn stop(&mut self) {
         self.is_running = false;
-        self.add_event(EventType::SystemStop, EventLevel::Info, "Monitor stopped".to_string(), None);
+        self.add_event(
+            EventType::SystemStop,
+            EventLevel::Info,
+            "Monitor stopped".to_string(),
+            None,
+        );
         log::info!("Monitor stopped");
     }
 
     /// 监控循环
     async fn monitor_loop(&mut self) -> Result<()> {
         let mut interval = time::interval(self.config.interval);
-        
+
         while self.is_running {
             interval.tick().await;
-            
+
             if let Err(e) = self.collect_metrics().await {
                 log::error!("Failed to collect metrics: {}", e);
                 self.add_event(
@@ -273,18 +283,18 @@ impl Monitor {
                     None,
                 );
             }
-            
+
             // 清理过期数据
             self.cleanup_history();
         }
-        
+
         Ok(())
     }
 
     /// 收集监控指标
     async fn collect_metrics(&mut self) -> Result<()> {
         let now = Utc::now();
-        
+
         // 收集流量数据
         if self.config.enable_traffic_monitor {
             if let Ok(traffic) = self.client.traffic().await {
@@ -292,26 +302,29 @@ impl Monitor {
                     timestamp: now,
                     upload_speed: traffic.up,
                     download_speed: traffic.down,
-                    total_upload: 0, // 需要累计计算
+                    total_upload: 0,   // 需要累计计算
                     total_download: 0, // 需要累计计算
                 };
-                
+
                 self.history.traffic_history.push(snapshot);
-                
+
                 // 检查流量阈值
                 if let Some(threshold) = self.config.traffic_threshold {
                     if traffic.up > threshold || traffic.down > threshold {
                         self.add_event(
                             EventType::TrafficAlert,
                             EventLevel::Warning,
-                            format!("High traffic detected: up={}, down={}", traffic.up, traffic.down),
+                            format!(
+                                "High traffic detected: up={}, down={}",
+                                traffic.up, traffic.down
+                            ),
                             Some(serde_json::to_value(&traffic).unwrap()),
                         );
                     }
                 }
             }
         }
-        
+
         // 收集内存数据
         if self.config.enable_memory_monitor {
             if let Ok(memory) = self.client.memory().await {
@@ -320,55 +333,62 @@ impl Monitor {
                 } else {
                     0.0
                 };
-                
+
                 let snapshot = MemorySnapshot {
                     timestamp: now,
                     used_memory: memory.in_use,
                     memory_limit: memory.os_limit,
                     usage_percentage,
                 };
-                
+
                 self.history.memory_history.push(snapshot);
-                
+
                 // 检查内存阈值
                 if let Some(threshold) = self.config.memory_threshold {
                     if memory.in_use > threshold {
                         self.add_event(
                             EventType::MemoryAlert,
                             EventLevel::Warning,
-                            format!("High memory usage: {} bytes ({}%)", memory.in_use, usage_percentage),
+                            format!(
+                                "High memory usage: {} bytes ({}%)",
+                                memory.in_use, usage_percentage
+                            ),
                             Some(serde_json::to_value(&memory).unwrap()),
                         );
                     }
                 }
             }
         }
-        
+
         // 收集连接数据
         if self.config.enable_connection_monitor {
             if let Ok(connections) = self.client.connections().await {
                 let mut connections_by_proxy = HashMap::new();
                 let mut connections_by_protocol = HashMap::new();
-                
+
                 for conn in &connections {
                     // 统计代理使用情况
                     if !conn.chains.is_empty() {
-                        *connections_by_proxy.entry(conn.chains[0].clone()).or_insert(0) += 1;
+                        *connections_by_proxy
+                            .entry(conn.chains[0].clone())
+                            .or_insert(0) += 1;
                     }
-                    
+
                     // 统计协议使用情况
-                    *connections_by_protocol.entry(conn.metadata.network.clone()).or_insert(0) += 1;
+                    *connections_by_protocol
+                        .entry(conn.metadata.network.clone())
+                        .or_insert(0) += 1;
                 }
-                
+
                 let snapshot = ConnectionSnapshot {
                     timestamp: now,
                     active_connections: connections.len(),
                     connections_by_proxy,
                     connections_by_protocol,
                 };
-                
+
                 self.history.connection_history.push(snapshot);
-                
+
                 // 检查连接数阈值
                 if let Some(threshold) = self.config.connection_threshold {
                     if connections.len() > threshold {
@@ -382,7 +402,7 @@ impl Monitor {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -392,10 +412,10 @@ impl Monitor {
         let traffic = self.client.traffic().await?;
         let memory = self.client.memory().await?;
         let connections = self.client.connections().await?;
-        
+
         // 计算健康状态
         let health = self.calculate_health_status(&traffic, &memory, connections.len());
-        
+
         Ok(SystemStatus {
             version,
             traffic,
@@ -407,10 +427,15 @@ impl Monitor {
     }
 
     /// 计算健康状态
-    fn calculate_health_status(&self, traffic: &Traffic, memory: &Memory, connection_count: usize) -> HealthStatus {
+    fn calculate_health_status(
+        &self,
+        traffic: &Traffic,
+        memory: &Memory,
+        connection_count: usize,
+    ) -> HealthStatus {
         let mut warnings = 0;
         let mut errors = 0;
-        
+
         // 检查内存使用
         if let Some(threshold) = self.config.memory_threshold {
             if memory.in_use > threshold {
@@ -421,7 +446,7 @@ impl Monitor {
                 }
             }
         }
-        
+
         // 检查连接数
         if let Some(threshold) = self.config.connection_threshold {
             if connection_count > threshold {
@@ -432,14 +457,14 @@ impl Monitor {
                 }
             }
         }
-        
+
         // 检查流量
         if let Some(threshold) = self.config.traffic_threshold {
             if traffic.up > threshold || traffic.down > threshold {
                 warnings += 1;
             }
         }
-        
+
         if errors > 0 {
             HealthStatus::Unhealthy
         } else if warnings > 0 {
@@ -452,19 +477,21 @@ impl Monitor {
     /// 获取性能统计
     pub fn get_performance_stats(&self, duration: Duration) -> PerformanceStats {
         let cutoff_time = Utc::now() - chrono::Duration::from_std(duration).unwrap();
-        
+
         // 从历史数据计算性能统计
-        let recent_events: Vec<_> = self.history.events
+        let recent_events: Vec<_> = self
+            .history
+            .events
             .iter()
             .filter(|e| e.timestamp > cutoff_time)
             .collect();
-        
+
         let total_events = recent_events.len() as f64;
         let error_events = recent_events
             .iter()
             .filter(|e| e.level >= EventLevel::Error)
             .count() as f64;
-        
+
         PerformanceStats {
             avg_response_time: 0.0, // 需要实际测量
             max_response_time: 0,
@@ -484,7 +511,13 @@ impl Monitor {
     }
 
     /// 添加监控事件
-    fn add_event(&mut self, event_type: EventType, level: EventLevel, message: String, data: Option<serde_json::Value>) {
+    fn add_event(
+        &mut self,
+        event_type: EventType,
+        level: EventLevel,
+        message: String,
+        data: Option<serde_json::Value>,
+    ) {
         let event = MonitorEvent {
             timestamp: Utc::now(),
             event_type,
@@ -492,9 +525,9 @@ impl Monitor {
             message,
             data,
         };
-        
+
         self.history.events.push(event);
-        
+
         // 限制事件数量
         if self.history.events.len() > 1000 {
             self.history.events.remove(0);
@@ -503,11 +536,18 @@ impl Monitor {
 
     /// 清理过期历史数据
     fn cleanup_history(&mut self) {
-        let cutoff_time = Utc::now() - chrono::Duration::from_std(self.config.history_retention).unwrap();
-        
-        self.history.traffic_history.retain(|s| s.timestamp > cutoff_time);
-        self.history.memory_history.retain(|s| s.timestamp > cutoff_time);
-        self.history.connection_history.retain(|s| s.timestamp > cutoff_time);
+        let cutoff_time =
+            Utc::now() - chrono::Duration::from_std(self.config.history_retention).unwrap();
+
+        self.history
+            .traffic_history
+            .retain(|s| s.timestamp > cutoff_time);
+        self.history
+            .memory_history
+            .retain(|s| s.timestamp > cutoff_time);
+        self.history
+            .connection_history
+            .retain(|s| s.timestamp > cutoff_time);
         self.history.events.retain(|e| e.timestamp > cutoff_time);
     }
 
@@ -518,16 +558,13 @@ impl Monitor {
 
     /// 获取最近的事件
     pub fn get_recent_events(&self, count: usize) -> Vec<&MonitorEvent> {
-        self.history.events
-            .iter()
-            .rev()
-            .take(count)
-            .collect()
+        self.history.events.iter().rev().take(count).collect()
     }
 
     /// 获取指定级别的事件
     pub fn get_events_by_level(&self, level: EventLevel) -> Vec<&MonitorEvent> {
-        self.history.events
+        self.history
+            .events
             .iter()
             .filter(|e| e.level >= level)
             .collect()
@@ -544,7 +581,7 @@ impl Default for MonitorConfig {
             enable_memory_monitor: true,
             connection_threshold: Some(1000),
             memory_threshold: Some(1024 * 1024 * 1024), // 1GB
-            traffic_threshold: Some(100 * 1024 * 1024),  // 100MB/s
+            traffic_threshold: Some(100 * 1024 * 1024), // 100MB/s
         }
     }
 }
@@ -586,10 +623,16 @@ mod tests {
     fn test_health_status_calculation() {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let monitor = Monitor::new(client);
-        
-        let traffic = Traffic { up: 1000, down: 2000 };
-        let memory = Memory { in_use: 500_000_000, os_limit: 1_000_000_000 };
-        
+
+        let traffic = Traffic {
+            up: 1000,
+            down: 2000,
+        };
+        let memory = Memory {
+            in_use: 500_000_000,
+            os_limit: 1_000_000_000,
+        };
+
         let health = monitor.calculate_health_status(&traffic, &memory, 100);
         assert_eq!(health, HealthStatus::Healthy);
     }
@@ -603,7 +646,7 @@ mod tests {
             message: "Test event".to_string(),
             data: None,
         };
-        
+
         assert_eq!(event.event_type, EventType::SystemStart);
         assert_eq!(event.level, EventLevel::Info);
     }

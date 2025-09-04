@@ -1,10 +1,10 @@
 //! 类型定义模块
-//! 
+//!
 //! 定义了 SDK 中使用的核心数据结构和类型。
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// 代理类型枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -246,12 +246,12 @@ impl ProxyItem {
     pub fn is_group(&self) -> bool {
         !self.all.is_empty()
     }
-    
+
     /// 判断是否为代理节点
     pub fn is_node(&self) -> bool {
         self.all.is_empty()
     }
-    
+
     /// 转换为代理节点
     pub fn to_proxy_node(&self) -> Option<ProxyNode> {
         if self.is_node() {
@@ -279,7 +279,7 @@ impl ProxyItem {
             None
         }
     }
-    
+
     /// 转换为代理组
     pub fn to_proxy_group(&self) -> Option<ProxyGroup> {
         if self.is_group() {
@@ -505,7 +505,7 @@ mod tests {
         let proxy_type = ProxyType::Socks5;
         let json = serde_json::to_string(&proxy_type).unwrap();
         assert_eq!(json, "\"socks5\"");
-        
+
         let deserialized: ProxyType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ProxyType::Socks5);
     }
@@ -532,7 +532,7 @@ mod tests {
             id: String::new(),
             extra: HashMap::new(),
         };
-        
+
         assert_eq!(node.name, "test-proxy");
         assert_eq!(node.proxy_type, ProxyType::Http);
         assert_eq!(node.server, Some("127.0.0.1".to_string()));

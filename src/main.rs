@@ -1,16 +1,16 @@
 //! Mihomo RS 命令行工具
-//! 
+//!
 //! 提供 mihomo 代理服务的管理功能
 
 use clap::{Parser, Subcommand};
 use mihomo_rs::{
     client::MihomoClient,
     config::ConfigManager,
-    proxy::ProxyManager,
-    monitor::Monitor,
-    rules::RuleEngine,
-    service::{ServiceManager, ServiceConfig},
     init_logger,
+    monitor::Monitor,
+    proxy::ProxyManager,
+    rules::RuleEngine,
+    service::ServiceManager,
 };
 use std::time::Duration;
 
@@ -23,15 +23,15 @@ struct Cli {
     /// Mihomo 服务地址
     #[arg(short, long, default_value = "http://127.0.0.1:9090")]
     url: String,
-    
+
     /// API 密钥
     #[arg(short, long)]
     secret: Option<String>,
-    
+
     /// 启用详细日志
     #[arg(short, long)]
     verbose: bool,
-    
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -188,7 +188,7 @@ enum VersionAction {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    
+
     // 初始化日志
     if cli.verbose {
         std::env::set_var("RUST_LOG", "debug");
@@ -196,22 +196,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("RUST_LOG", "info");
     }
     init_logger();
-    
+
     // 创建客户端
     let client = MihomoClient::new(&cli.url, cli.secret)?;
-    
+
     match cli.command {
         Commands::Status => handle_status(&client).await?,
         Commands::Proxy { action } => handle_proxy(&client, action).await?,
         Commands::Config { action } => handle_config(&client, action).await?,
         Commands::Monitor { interval, duration } => {
             handle_monitor(&client, interval, duration).await?
-        },
+        }
         Commands::Rules => handle_rules(&client).await?,
         Commands::Connections { action } => handle_connections(&client, action).await?,
         Commands::Service { action } => handle_service(&client, action).await?,
     }
-    
+
     Ok(())
 }
 
@@ -226,34 +226,34 @@ async fn handle_version(
             let versions = service_manager.get_available_versions().await?;
             println!("可用版本:");
             for version in versions {
-                 println!("  📦 {} - {}", version.version, version.description);
-             }
-        },
+                println!("  📦 {} - {}", version.version, version.description);
+            }
+        }
         VersionAction::Download { version } => {
-             println!("⬇️ 下载版本 {}...", version);
-             // 这里需要先获取版本信息，然后下载
-             let versions = service_manager.get_available_versions().await?;
-             if let Some(version_info) = versions.iter().find(|v| v.version == version) {
-                  service_manager.download_and_install(version_info).await?;
-                 println!("✅ 版本 {} 下载并安装成功", version);
-             } else {
-                 println!("❌ 未找到版本: {}", version);
-             }
-         },
+            println!("⬇️ 下载版本 {}...", version);
+            // 这里需要先获取版本信息，然后下载
+            let versions = service_manager.get_available_versions().await?;
+            if let Some(version_info) = versions.iter().find(|v| v.version == version) {
+                service_manager.download_and_install(version_info).await?;
+                println!("✅ 版本 {} 下载并安装成功", version);
+            } else {
+                println!("❌ 未找到版本: {}", version);
+            }
+        }
         VersionAction::Latest => {
             println!("⬇️ 下载并安装最新版本...");
             service_manager.download_latest().await?;
             println!("✅ 最新版本下载并安装成功");
-        },
+        }
         VersionAction::Current => {
             println!("🔍 获取当前版本...");
             match service_manager.get_current_version().await {
                 Ok(version) => println!("📦 当前版本: {}", version),
                 Err(_) => println!("❌ 未找到当前版本信息"),
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
@@ -267,102 +267,111 @@ async fn handle_service(
             println!("🔧 初始化配置目录...");
             let config_dir = ServiceManager::init_app_config()?;
             println!("✅ 配置目录已创建: {}", config_dir.display());
-            println!("📝 默认配置文件已生成: {}", config_dir.join("config.yaml").display());
-        },
+            println!(
+                "📝 默认配置文件已生成: {}",
+                config_dir.join("config.yaml").display()
+            );
+        }
         ServiceAction::Start => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
             println!("🚀 启动服务...");
             service_manager.start().await?;
             println!("✅ 服务启动成功");
-        },
+        }
         ServiceAction::Stop => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
             println!("🛑 停止服务...");
             service_manager.stop().await?;
             println!("✅ 服务已停止");
-        },
+        }
         ServiceAction::Restart => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
             println!("🔄 重启服务...");
             service_manager.restart().await?;
             println!("✅ 服务重启成功");
-        },
+        }
         ServiceAction::Status => {
             let service_manager = ServiceManager::new_with_defaults()?;
             println!("🔍 获取服务状态...");
             let status = service_manager.get_status().await?;
             println!("📊 服务状态: {:?}", status);
-        },
+        }
         ServiceAction::Version { action } => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
             handle_version(&mut service_manager, action).await?;
-        },
+        }
         ServiceAction::Upgrade { version, backup } => {
             let mut service_manager = ServiceManager::new_with_defaults()?;
-            
+
             match version {
                 Some(target_version) => {
                     println!("🔄 升级到指定版本: {}...", target_version);
-                    
+
                     // 获取可用版本列表
                     let versions = service_manager.get_available_versions().await?;
-                    let version_info = versions.into_iter()
+                    let version_info = versions
+                        .into_iter()
                         .find(|v| v.version.contains(&target_version))
                         .ok_or_else(|| format!("未找到版本: {}", target_version))?;
-                    
-                    service_manager.upgrade_to_version(&version_info, backup).await?;
+
+                    service_manager
+                        .upgrade_to_version(&version_info, backup)
+                        .await?;
                     println!("✅ 升级到版本 {} 成功", target_version);
-                },
+                }
                 None => {
                     println!("🔄 升级到最新版本...");
                     service_manager.upgrade_to_latest(backup).await?;
                     println!("✅ 升级到最新版本成功");
                 }
             }
-        },
-        ServiceAction::Uninstall { keep_config, confirm } => {
+        }
+        ServiceAction::Uninstall {
+            keep_config,
+            confirm,
+        } => {
             if !confirm {
                 println!("❌ 请使用 --confirm 参数确认卸载操作");
                 println!("⚠️  这将删除所有 mihomo-rs 相关文件");
                 return Ok(());
             }
-            
+
             let mut service_manager = ServiceManager::new_with_defaults()?;
             println!("🗑️  开始卸载 mihomo-rs...");
-            
+
             if keep_config {
                 println!("📝 将保留配置文件");
             } else {
                 println!("⚠️  将删除所有文件包括配置");
             }
-            
+
             service_manager.uninstall(keep_config).await?;
-        },
+        }
         ServiceAction::Cleanup { keep } => {
             let service_manager = ServiceManager::new_with_defaults()?;
             println!("🧹 清理备份文件，保留最新 {} 个...", keep);
             service_manager.cleanup_backups(keep)?;
             println!("✅ 备份文件清理完成");
-        },
+        }
     }
-    
+
     Ok(())
 }
 
 /// 处理状态命令
 async fn handle_status(client: &MihomoClient) -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 获取服务状态...");
-    
+
     let version = client.version().await?;
     let traffic = client.traffic().await?;
     let memory = client.memory().await?;
-    
+
     println!("\n📊 Mihomo 服务状态:");
     println!("版本: {}", version.version);
     println!("上传: {} MB", traffic.up / 1024 / 1024);
     println!("下载: {} MB", traffic.down / 1024 / 1024);
     println!("内存使用: {} MB", memory.in_use / 1024 / 1024);
-    
+
     Ok(())
 }
 
@@ -372,7 +381,7 @@ async fn handle_proxy(
     action: ProxyAction,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut proxy_manager = ProxyManager::new(client.clone());
-    
+
     match action {
         ProxyAction::List => {
             let proxies = proxy_manager.get_proxies().await?;
@@ -380,29 +389,38 @@ async fn handle_proxy(
             for (name, proxy) in proxies {
                 println!("  {} (类型: {:?})", name, proxy.proxy_type);
             }
-            
+
             let groups = proxy_manager.get_proxy_groups().await?;
             println!("\n📋 代理组:");
             for (name, group) in groups {
-                println!("  {} (类型: {:?}, 当前: {})", name, group.group_type, group.now);
+                println!(
+                    "  {} (类型: {:?}, 当前: {})",
+                    name, group.group_type, group.now
+                );
             }
-        },
+        }
         ProxyAction::Switch { group, proxy } => {
             println!("🔄 切换代理: {} -> {}", group, proxy);
             proxy_manager.switch_proxy(&group, &proxy).await?;
             println!("✅ 代理切换成功");
-        },
-        ProxyAction::Test { proxy, url, timeout } => {
+        }
+        ProxyAction::Test {
+            proxy,
+            url,
+            timeout,
+        } => {
             println!("🧪 测试代理延迟: {}", proxy);
-            let delay = proxy_manager.test_proxy_delay(&proxy, Some(&url), Some(timeout)).await?;
+            let delay = proxy_manager
+                .test_proxy_delay(&proxy, Some(&url), Some(timeout))
+                .await?;
             if delay.delay > 0 {
                 println!("✅ 延迟: {} ms", delay.delay);
             } else {
                 println!("❌ 代理不可用");
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
@@ -417,12 +435,12 @@ async fn handle_config(
             let config = client.get_config().await?;
             println!("\n📋 当前配置:");
             println!("{}", serde_json::to_string_pretty(&config)?);
-        },
+        }
         ConfigAction::Reload => {
             println!("🔄 重新加载配置...");
             client.reload_config().await?;
             println!("✅ 配置重新加载成功");
-        },
+        }
         ConfigAction::Validate { path } => {
             println!("🔍 验证配置文件: {}", path);
             let mut config_manager = ConfigManager::new();
@@ -430,9 +448,9 @@ async fn handle_config(
                 Ok(_) => println!("✅ 配置文件有效"),
                 Err(e) => println!("❌ 配置文件无效: {}", e),
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
@@ -443,10 +461,10 @@ async fn handle_monitor(
     duration: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 开始监控服务 (间隔: {}s, 持续: {}s)", interval, duration);
-    
+
     let monitor = Monitor::new(client.clone());
     let start_time = std::time::Instant::now();
-    
+
     while start_time.elapsed().as_secs() < duration {
         match monitor.get_system_status().await {
             Ok(status) => {
@@ -457,15 +475,15 @@ async fn handle_monitor(
                 println!("  内存: {} MB", status.memory.in_use / 1024 / 1024);
                 println!("  连接数: {}", status.active_connections);
                 println!("  健康状态: {:?}", status.health);
-            },
+            }
             Err(e) => {
                 println!("❌ 获取状态失败: {}", e);
             }
         }
-        
+
         tokio::time::sleep(Duration::from_secs(interval)).await;
     }
-    
+
     println!("\n✅ 监控完成");
     Ok(())
 }
@@ -473,31 +491,33 @@ async fn handle_monitor(
 /// 处理规则命令
 async fn handle_rules(client: &MihomoClient) -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 获取规则列表...");
-    
+
     let rules = client.rules().await?;
     let mut rule_engine = RuleEngine::new(client.clone());
-    
+
     println!("\n📋 规则列表 (共 {} 条):", rules.len());
     for (i, rule) in rules.iter().enumerate().take(20) {
         println!("  {}: {} -> {}", i + 1, rule.payload, rule.proxy);
     }
-    
+
     if rules.len() > 20 {
         println!("  ... 还有 {} 条规则", rules.len() - 20);
     }
-    
+
     // 测试规则匹配
     println!("\n🧪 测试规则匹配:");
     let test_domains = ["www.google.com", "www.baidu.com", "github.com"];
-    
+
     for domain in &test_domains {
         match rule_engine.match_rule(domain, Some(80), Some("tcp")).await {
-            Ok(Some((rule, proxy))) => println!("  {} -> {} (规则: {:?})", domain, proxy, rule.rule_type),
+            Ok(Some((rule, proxy))) => {
+                println!("  {} -> {} (规则: {:?})", domain, proxy, rule.rule_type)
+            }
             Ok(None) => println!("  {} -> DIRECT", domain),
             Err(e) => println!("  {} -> 错误: {}", domain, e),
         }
     }
-    
+
     Ok(())
 }
 
@@ -511,31 +531,32 @@ async fn handle_connections(
             println!("🔄 关闭连接: {}", id);
             client.close_connection(&id).await?;
             println!("✅ 连接已关闭");
-        },
+        }
         Some(ConnectionAction::CloseAll) => {
             println!("🔄 关闭所有连接...");
             client.close_all_connections().await?;
             println!("✅ 所有连接已关闭");
-        },
+        }
         None => {
             println!("🔍 获取连接列表...");
             let connections = client.connections().await?;
-            
+
             println!("\n📋 活跃连接 (共 {} 个):", connections.len());
             for (i, conn) in connections.iter().enumerate().take(10) {
-                println!("  {}: {} -> {} ({})", 
-                    i + 1, 
-                    conn.metadata.source_ip, 
-                    conn.metadata.destination_ip, 
+                println!(
+                    "  {}: {} -> {} ({})",
+                    i + 1,
+                    conn.metadata.source_ip,
+                    conn.metadata.destination_ip,
                     conn.chains.join(" -> ")
                 );
             }
-            
+
             if connections.len() > 10 {
                 println!("  ... 还有 {} 个连接", connections.len() - 10);
             }
         }
     }
-    
+
     Ok(())
 }

@@ -1,5 +1,5 @@
 //! 代理核心功能模块
-//! 
+//!
 //! 提供代理服务器管理、连接处理和代理选择功能。
 
 use crate::client::MihomoClient;
@@ -7,7 +7,6 @@ use crate::error::{MihomoError, Result};
 use crate::types::*;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use tokio::time;
 
 /// 代理管理器
 #[derive(Debug)]
@@ -26,13 +25,13 @@ pub struct ProxyManager {
 
 impl ProxyManager {
     /// 创建新的代理管理器
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `client` - mihomo 客户端实例
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// # use mihomo_rs::{client::MihomoClient, proxy::ProxyManager};
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -68,18 +67,21 @@ impl ProxyManager {
     /// 刷新代理缓存
     async fn refresh_cache(&mut self) -> Result<()> {
         log::debug!("Refreshing proxy cache");
-        
+
         // 获取所有代理节点
         self.proxy_cache = self.client.proxies().await?;
-        
+
         // 获取代理组信息
         self.group_cache = self.client.proxy_groups().await?;
-        
+
         self.cache_updated_at = Some(Instant::now());
-        
-        log::debug!("Proxy cache refreshed: {} proxies, {} groups", 
-                   self.proxy_cache.len(), self.group_cache.len());
-        
+
+        log::debug!(
+            "Proxy cache refreshed: {} proxies, {} groups",
+            self.proxy_cache.len(),
+            self.group_cache.len()
+        );
+
         Ok(())
     }
 
@@ -116,14 +118,14 @@ impl ProxyManager {
     }
 
     /// 切换代理组选择
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `group_name` - 代理组名称
     /// * `proxy_name` - 要选择的代理名称
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// # use mihomo_rs::{client::MihomoClient, proxy::ProxyManager};
     /// # #[tokio::main]
@@ -137,41 +139,45 @@ impl ProxyManager {
     pub async fn switch_proxy(&mut self, group_name: &str, proxy_name: &str) -> Result<()> {
         // 验证代理组是否存在
         self.ensure_cache().await?;
-        
+
         if !self.group_cache.contains_key(group_name) {
-            return Err(MihomoError::proxy(format!("Proxy group '{}' not found", group_name)));
+            return Err(MihomoError::proxy(format!(
+                "Proxy group '{}' not found",
+                group_name
+            )));
         }
-        
+
         // 验证代理是否存在于组中
         let group = &self.group_cache[group_name];
         if !group.all.contains(&proxy_name.to_string()) {
             return Err(MihomoError::proxy(format!(
-                "Proxy '{}' not found in group '{}'", proxy_name, group_name
+                "Proxy '{}' not found in group '{}'",
+                proxy_name, group_name
             )));
         }
-        
+
         // 执行切换
         self.client.switch_proxy(group_name, proxy_name).await?;
-        
+
         // 更新缓存中的当前选择
         if let Some(group) = self.group_cache.get_mut(group_name) {
             group.now = proxy_name.to_string();
         }
-        
+
         log::info!("Switched proxy group '{}' to '{}'", group_name, proxy_name);
         Ok(())
     }
 
     /// 测试代理延迟
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `proxy_name` - 代理名称
     /// * `test_url` - 测试URL（可选，默认使用系统配置）
     /// * `timeout` - 超时时间（毫秒，可选）
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// # use mihomo_rs::{client::MihomoClient, proxy::ProxyManager};
     /// # #[tokio::main]
@@ -189,19 +195,21 @@ impl ProxyManager {
         test_url: Option<&str>,
         timeout: Option<u32>,
     ) -> Result<DelayHistory> {
-        self.client.test_proxy_delay(proxy_name, test_url, timeout).await
+        self.client
+            .test_proxy_delay(proxy_name, test_url, timeout)
+            .await
     }
 
     /// 批量测试代理延迟
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `proxy_names` - 代理名称列表
     /// * `test_url` - 测试URL（可选）
     /// * `timeout` - 超时时间（毫秒，可选）
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回代理名称到延迟结果的映射
     pub async fn test_multiple_proxy_delays(
         &self,
@@ -210,7 +218,7 @@ impl ProxyManager {
         timeout: Option<u32>,
     ) -> HashMap<String, Result<DelayHistory>> {
         let mut results = HashMap::new();
-        
+
         // 并发测试所有代理
         let tasks: Vec<_> = proxy_names
             .iter()
@@ -218,7 +226,7 @@ impl ProxyManager {
                 let client = self.client.clone();
                 let name = name.clone();
                 let test_url = test_url.map(|s| s.to_string());
-                
+
                 tokio::spawn(async move {
                     let result = client
                         .test_proxy_delay(&name, test_url.as_deref(), timeout)
@@ -227,27 +235,27 @@ impl ProxyManager {
                 })
             })
             .collect();
-        
+
         // 等待所有任务完成
         for task in tasks {
             if let Ok((name, result)) = task.await {
                 results.insert(name, result);
             }
         }
-        
+
         results
     }
 
     /// 自动选择最快的代理
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `group_name` - 代理组名称
     /// * `test_url` - 测试URL（可选）
     /// * `timeout` - 超时时间（毫秒，可选）
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回选中的代理名称和延迟信息
     pub async fn auto_select_fastest_proxy(
         &mut self,
@@ -256,22 +264,33 @@ impl ProxyManager {
         timeout: Option<u32>,
     ) -> Result<(String, DelayHistory)> {
         self.ensure_cache().await?;
-        
-        let group = self.group_cache.get(group_name)
+
+        let group = self
+            .group_cache
+            .get(group_name)
             .ok_or_else(|| MihomoError::proxy(format!("Proxy group '{}' not found", group_name)))?;
-        
+
         if group.all.is_empty() {
-            return Err(MihomoError::proxy(format!("Proxy group '{}' is empty", group_name)));
+            return Err(MihomoError::proxy(format!(
+                "Proxy group '{}' is empty",
+                group_name
+            )));
         }
-        
-        log::info!("Testing {} proxies in group '{}'", group.all.len(), group_name);
-        
+
+        log::info!(
+            "Testing {} proxies in group '{}'",
+            group.all.len(),
+            group_name
+        );
+
         // 测试所有代理的延迟
-        let delay_results = self.test_multiple_proxy_delays(&group.all, test_url, timeout).await;
-        
+        let delay_results = self
+            .test_multiple_proxy_delays(&group.all, test_url, timeout)
+            .await;
+
         // 找到延迟最小的代理
         let mut best_proxy: Option<(String, DelayHistory)> = None;
-        
+
         for (proxy_name, result) in delay_results {
             if let Ok(delay_history) = result {
                 if let Some((_, ref current_best)) = best_proxy {
@@ -285,36 +304,42 @@ impl ProxyManager {
                 log::warn!("Failed to test proxy '{}': {:?}", proxy_name, result);
             }
         }
-        
-        let (best_proxy_name, best_delay) = best_proxy
-            .ok_or_else(|| MihomoError::proxy("No available proxy found"))?;
-        
+
+        let (best_proxy_name, best_delay) =
+            best_proxy.ok_or_else(|| MihomoError::proxy("No available proxy found"))?;
+
         // 切换到最快的代理
         self.switch_proxy(group_name, &best_proxy_name).await?;
-        
-        log::info!("Auto-selected proxy '{}' with delay {}ms", best_proxy_name, best_delay.delay);
-        
+
+        log::info!(
+            "Auto-selected proxy '{}' with delay {}ms",
+            best_proxy_name,
+            best_delay.delay
+        );
+
         Ok((best_proxy_name, best_delay))
     }
 
     /// 获取代理统计信息
     pub async fn get_proxy_stats(&mut self) -> Result<ProxyStats> {
         self.ensure_cache().await?;
-        
+
         let total_proxies = self.proxy_cache.len();
         let total_groups = self.group_cache.len();
-        
+
         // 统计各种代理类型
         let mut type_counts = HashMap::new();
         for proxy in self.proxy_cache.values() {
             *type_counts.entry(proxy.proxy_type.clone()).or_insert(0) += 1;
         }
-        
+
         // 统计有延迟信息的代理数量
-        let proxies_with_delay = self.proxy_cache.values()
+        let proxies_with_delay = self
+            .proxy_cache
+            .values()
             .filter(|p| p.delay.is_some())
             .count();
-        
+
         Ok(ProxyStats {
             total_proxies,
             total_groups,
@@ -357,14 +382,14 @@ impl ProxySelector {
     }
 
     /// 根据延迟选择代理
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `group_name` - 代理组名称
     /// * `max_delay` - 最大允许延迟（毫秒）
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回符合条件的代理列表，按延迟排序
     pub async fn select_by_delay(
         &mut self,
@@ -372,13 +397,18 @@ impl ProxySelector {
         max_delay: u32,
     ) -> Result<Vec<(String, u32)>> {
         let group = {
-            let group = self.manager.get_proxy_group(group_name).await?
-                .ok_or_else(|| MihomoError::proxy(format!("Proxy group '{}' not found", group_name)))?;
+            let group = self
+                .manager
+                .get_proxy_group(group_name)
+                .await?
+                .ok_or_else(|| {
+                    MihomoError::proxy(format!("Proxy group '{}' not found", group_name))
+                })?;
             group.clone()
         };
-        
+
         let mut candidates = Vec::new();
-        
+
         for proxy_name in &group.all {
             if let Some(proxy) = self.manager.get_proxy(proxy_name).await? {
                 if let Some(delay) = proxy.delay {
@@ -388,22 +418,22 @@ impl ProxySelector {
                 }
             }
         }
-        
+
         // 按延迟排序
         candidates.sort_by_key(|(_, delay)| *delay);
-        
+
         Ok(candidates)
     }
 
     /// 根据地区选择代理
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `group_name` - 代理组名称
     /// * `region_keywords` - 地区关键字列表
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回包含指定地区关键字的代理列表
     pub async fn select_by_region(
         &mut self,
@@ -411,13 +441,18 @@ impl ProxySelector {
         region_keywords: &[&str],
     ) -> Result<Vec<String>> {
         let group = {
-            let group = self.manager.get_proxy_group(group_name).await?
-                .ok_or_else(|| MihomoError::proxy(format!("Proxy group '{}' not found", group_name)))?;
+            let group = self
+                .manager
+                .get_proxy_group(group_name)
+                .await?
+                .ok_or_else(|| {
+                    MihomoError::proxy(format!("Proxy group '{}' not found", group_name))
+                })?;
             group.clone()
         };
-        
+
         let mut candidates = Vec::new();
-        
+
         for proxy_name in &group.all {
             for keyword in region_keywords {
                 if proxy_name.to_lowercase().contains(&keyword.to_lowercase()) {
@@ -426,7 +461,7 @@ impl ProxySelector {
                 }
             }
         }
-        
+
         Ok(candidates)
     }
 }
@@ -458,7 +493,7 @@ mod tests {
             proxies_with_delay: 8,
             type_counts: HashMap::new(),
         };
-        
+
         assert_eq!(stats.total_proxies, 10);
         assert_eq!(stats.total_groups, 3);
     }

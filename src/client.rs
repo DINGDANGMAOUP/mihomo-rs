@@ -1,5 +1,5 @@
 //! 客户端模块
-//! 
+//!
 //! 提供与 mihomo API 通信的核心客户端功能。
 
 use crate::error::{MihomoError, Result};
@@ -22,14 +22,14 @@ pub struct MihomoClient {
 
 impl MihomoClient {
     /// 创建新的客户端实例
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `base_url` - mihomo 服务的基础 URL
     /// * `secret` - API 访问密钥（可选）
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// # use mihomo_rs::client::MihomoClient;
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,7 +40,7 @@ impl MihomoClient {
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
         let base_url = Url::parse(base_url)
             .map_err(|e| MihomoError::invalid_parameter(format!("Invalid base URL: {}", e)))?;
-        
+
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -67,16 +67,17 @@ impl MihomoClient {
     {
         let url = self.build_url(path)?;
         let mut request = self.client.get(url);
-        
+
         if let Some(ref secret) = self.secret {
             request = request.header("Authorization", format!("Bearer {}", secret));
         }
-        
+
         let response = request.send().await?;
         self.handle_response(response).await
     }
 
     /// 发送 POST 请求
+    #[allow(dead_code)]
     async fn post<T, B>(&self, path: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
@@ -84,11 +85,11 @@ impl MihomoClient {
     {
         let url = self.build_url(path)?;
         let mut request = self.client.post(url).json(body);
-        
+
         if let Some(ref secret) = self.secret {
             request = request.header("Authorization", format!("Bearer {}", secret));
         }
-        
+
         let response = request.send().await?;
         self.handle_response(response).await
     }
@@ -101,11 +102,11 @@ impl MihomoClient {
     {
         let url = self.build_url(path)?;
         let mut request = self.client.put(url).json(body);
-        
+
         if let Some(ref secret) = self.secret {
             request = request.header("Authorization", format!("Bearer {}", secret));
         }
-        
+
         let response = request.send().await?;
         self.handle_response(response).await
     }
@@ -117,11 +118,11 @@ impl MihomoClient {
     {
         let url = self.build_url(path)?;
         let mut request = self.client.delete(url);
-        
+
         if let Some(ref secret) = self.secret {
             request = request.header("Authorization", format!("Bearer {}", secret));
         }
-        
+
         let response = request.send().await?;
         self.handle_response(response).await
     }
@@ -132,16 +133,14 @@ impl MihomoClient {
         T: DeserializeOwned,
     {
         let status = response.status();
-        
+
         if status.is_success() {
             let text = response.text().await?;
             if text.is_empty() {
                 // 对于空响应，尝试反序列化为空对象
-                serde_json::from_str("{}")
-                    .map_err(MihomoError::Json)
+                serde_json::from_str("{}").map_err(MihomoError::Json)
             } else {
-                serde_json::from_str(&text)
-                    .map_err(MihomoError::Json)
+                serde_json::from_str(&text).map_err(MihomoError::Json)
             }
         } else {
             let error_text = response.text().await.unwrap_or_default();
@@ -150,10 +149,12 @@ impl MihomoClient {
                 403 => Err(MihomoError::auth("Forbidden access")),
                 404 => Err(MihomoError::not_found("Resource not found")),
                 500..=599 => Err(MihomoError::ServiceUnavailable(format!(
-                    "Server error: {} - {}", status, error_text
+                    "Server error: {} - {}",
+                    status, error_text
                 ))),
                 _ => Err(MihomoError::network(format!(
-                    "HTTP error: {} - {}", status, error_text
+                    "HTTP error: {} - {}",
+                    status, error_text
                 ))),
             }
         }
@@ -212,7 +213,8 @@ impl MihomoClient {
 
     /// 关闭指定连接
     pub async fn close_connection(&self, connection_id: &str) -> Result<EmptyResponse> {
-        self.delete(&format!("/connections/{}", connection_id)).await
+        self.delete(&format!("/connections/{}", connection_id))
+            .await
     }
 
     /// 关闭所有连接
@@ -231,23 +233,28 @@ impl MihomoClient {
     }
 
     /// 测试代理延迟
-    pub async fn test_proxy_delay(&self, proxy_name: &str, test_url: Option<&str>, timeout: Option<u32>) -> Result<DelayHistory> {
+    pub async fn test_proxy_delay(
+        &self,
+        proxy_name: &str,
+        test_url: Option<&str>,
+        timeout: Option<u32>,
+    ) -> Result<DelayHistory> {
         let mut query_params = vec![];
-        
+
         if let Some(url) = test_url {
             query_params.push(format!("url={}", url));
         }
-        
+
         if let Some(timeout_ms) = timeout {
             query_params.push(format!("timeout={}", timeout_ms));
         }
-        
+
         let query_string = if query_params.is_empty() {
             String::new()
         } else {
             format!("?{}", query_params.join("&"))
         };
-        
+
         let path = format!("/proxies/{}/delay{}", proxy_name, query_string);
         self.get(&path).await
     }

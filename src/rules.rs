@@ -1,5 +1,5 @@
 //! 规则引擎模块
-//! 
+//!
 //! 提供流量分流和规则匹配功能，支持多种规则类型和自定义规则。
 
 use crate::client::MihomoClient;
@@ -7,7 +7,7 @@ use crate::error::{MihomoError, Result};
 use crate::types::{Rule, RuleType};
 use regex::Regex;
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 use std::str::FromStr;
 
 /// 规则引擎
@@ -17,7 +17,8 @@ pub struct RuleEngine {
     client: MihomoClient,
     /// 规则缓存
     rules_cache: Vec<Rule>,
-    /// 编译后的正则表达式缓存
+    /// 正则表达式缓存
+    #[allow(dead_code)]
     regex_cache: HashMap<String, Regex>,
     /// 缓存是否有效
     cache_valid: bool,
@@ -25,16 +26,16 @@ pub struct RuleEngine {
 
 impl RuleEngine {
     /// 创建新的规则引擎
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `client` - mihomo 客户端实例
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// use mihomo_rs::{MihomoClient, rules::RuleEngine};
-    /// 
+    ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = MihomoClient::new("http://127.0.0.1:9090", None)?;
     /// let engine = RuleEngine::new(client);
@@ -53,11 +54,14 @@ impl RuleEngine {
     /// 刷新规则缓存
     pub async fn refresh_rules(&mut self) -> Result<()> {
         log::debug!("Refreshing rules cache");
-        
+
         self.rules_cache = self.client.rules().await?;
         self.cache_valid = true;
-        
-        log::debug!("Rules cache refreshed: {} rules loaded", self.rules_cache.len());
+
+        log::debug!(
+            "Rules cache refreshed: {} rules loaded",
+            self.rules_cache.len()
+        );
         Ok(())
     }
 
@@ -76,15 +80,15 @@ impl RuleEngine {
     }
 
     /// 根据目标匹配规则
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `target` - 目标地址或域名
     /// * `port` - 目标端口（可选）
     /// * `network` - 网络类型（tcp/udp，可选）
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回匹配的规则和对应的代理名称
     pub async fn match_rule(
         &mut self,
@@ -93,14 +97,14 @@ impl RuleEngine {
         _network: Option<&str>,
     ) -> Result<Option<(Rule, String)>> {
         self.ensure_rules_cache().await?;
-        
+
         let rules_cache = self.rules_cache.clone();
         for rule in &rules_cache {
             if self.is_rule_match(rule, target, port, _network)? {
                 return Ok(Some((rule.clone(), rule.proxy.clone())));
             }
         }
-        
+
         Ok(None)
     }
 
@@ -110,7 +114,7 @@ impl RuleEngine {
         rule: &Rule,
         target: &str,
         port: Option<u16>,
-        network: Option<&str>,
+        _network: Option<&str>,
     ) -> Result<bool> {
         match rule.rule_type {
             RuleType::Domain => self.match_domain(rule, target),
@@ -137,9 +141,9 @@ impl RuleEngine {
     /// 匹配域名后缀规则
     fn match_domain_suffix(&self, rule: &Rule, target: &str) -> Result<bool> {
         let suffix = &rule.payload;
-        Ok(target.to_lowercase().ends_with(&suffix.to_lowercase()) &&
-           (target.len() == suffix.len() || 
-            target.chars().nth(target.len() - suffix.len() - 1) == Some('.')))
+        Ok(target.to_lowercase().ends_with(&suffix.to_lowercase())
+            && (target.len() == suffix.len()
+                || target.chars().nth(target.len() - suffix.len() - 1) == Some('.')))
     }
 
     /// 匹配域名关键字规则
@@ -177,7 +181,8 @@ impl RuleEngine {
                 // 端口范围：如 "80-90"
                 let parts: Vec<&str> = rule.payload.split('-').collect();
                 if parts.len() == 2 {
-                    if let (Ok(start), Ok(end)) = (parts[0].parse::<u16>(), parts[1].parse::<u16>()) {
+                    if let (Ok(start), Ok(end)) = (parts[0].parse::<u16>(), parts[1].parse::<u16>())
+                    {
                         return Ok(target_port >= start && target_port <= end);
                     }
                 }
@@ -209,33 +214,42 @@ impl RuleEngine {
 
         let network_ip = IpAddr::from_str(parts[0])
             .map_err(|_| MihomoError::rules(format!("Invalid IP in CIDR: {}", parts[0])))?;
-        
-        let prefix_len: u8 = parts[1].parse()
+
+        let prefix_len: u8 = parts[1]
+            .parse()
             .map_err(|_| MihomoError::rules(format!("Invalid prefix length: {}", parts[1])))?;
 
         match (ip, network_ip) {
             (IpAddr::V4(ip4), IpAddr::V4(net4)) => {
                 if prefix_len > 32 {
-                    return Err(MihomoError::rules("IPv4 prefix length cannot exceed 32".to_string()));
+                    return Err(MihomoError::rules(
+                        "IPv4 prefix length cannot exceed 32".to_string(),
+                    ));
                 }
-                let mask = if prefix_len == 0 { 0 } else { !0u32 << (32 - prefix_len) };
+                let mask = if prefix_len == 0 {
+                    0
+                } else {
+                    !0u32 << (32 - prefix_len)
+                };
                 Ok((u32::from(ip4) & mask) == (u32::from(net4) & mask))
             }
             (IpAddr::V6(ip6), IpAddr::V6(net6)) => {
                 if prefix_len > 128 {
-                    return Err(MihomoError::rules("IPv6 prefix length cannot exceed 128".to_string()));
+                    return Err(MihomoError::rules(
+                        "IPv6 prefix length cannot exceed 128".to_string(),
+                    ));
                 }
                 let ip6_bytes = ip6.octets();
                 let net6_bytes = net6.octets();
-                
+
                 let full_bytes = (prefix_len / 8) as usize;
                 let remaining_bits = prefix_len % 8;
-                
+
                 // 检查完整字节
                 if ip6_bytes[..full_bytes] != net6_bytes[..full_bytes] {
                     return Ok(false);
                 }
-                
+
                 // 检查剩余位
                 if remaining_bits > 0 && full_bytes < 16 {
                     let mask = !0u8 << (8 - remaining_bits);
@@ -243,7 +257,7 @@ impl RuleEngine {
                         return Ok(false);
                     }
                 }
-                
+
                 Ok(true)
             }
             _ => Ok(false), // IP版本不匹配
@@ -253,16 +267,16 @@ impl RuleEngine {
     /// 获取规则统计信息
     pub async fn get_rule_stats(&mut self) -> Result<RuleStats> {
         self.ensure_rules_cache().await?;
-        
+
         let total_rules = self.rules_cache.len();
         let mut type_counts = HashMap::new();
         let mut proxy_counts = HashMap::new();
-        
+
         for rule in &self.rules_cache {
             *type_counts.entry(rule.rule_type.clone()).or_insert(0) += 1;
             *proxy_counts.entry(rule.proxy.clone()).or_insert(0) += 1;
         }
-        
+
         Ok(RuleStats {
             total_rules,
             type_counts,
@@ -273,8 +287,9 @@ impl RuleEngine {
     /// 查找使用指定代理的规则
     pub async fn find_rules_by_proxy(&mut self, proxy_name: &str) -> Result<Vec<Rule>> {
         self.ensure_rules_cache().await?;
-        
-        Ok(self.rules_cache
+
+        Ok(self
+            .rules_cache
             .iter()
             .filter(|rule| rule.proxy == proxy_name)
             .cloned()
@@ -284,8 +299,9 @@ impl RuleEngine {
     /// 查找指定类型的规则
     pub async fn find_rules_by_type(&mut self, rule_type: RuleType) -> Result<Vec<Rule>> {
         self.ensure_rules_cache().await?;
-        
-        Ok(self.rules_cache
+
+        Ok(self
+            .rules_cache
             .iter()
             .filter(|rule| rule.rule_type == rule_type)
             .cloned()
@@ -295,11 +311,13 @@ impl RuleEngine {
     /// 验证规则格式
     pub fn validate_rule(&self, rule_str: &str) -> Result<ParsedRule> {
         let parts: Vec<&str> = rule_str.split(',').collect();
-        
+
         if parts.len() < 3 {
-            return Err(MihomoError::rules("Rule must have at least 3 parts: TYPE,PAYLOAD,TARGET".to_string()));
+            return Err(MihomoError::rules(
+                "Rule must have at least 3 parts: TYPE,PAYLOAD,TARGET".to_string(),
+            ));
         }
-        
+
         let rule_type = match parts[0].to_uppercase().as_str() {
             "DOMAIN" => RuleType::Domain,
             "DOMAIN-SUFFIX" => RuleType::DomainSuffix,
@@ -314,9 +332,14 @@ impl RuleEngine {
             "SCRIPT" => RuleType::Script,
             "RULE-SET" => RuleType::RuleSet,
             "MATCH" => RuleType::Match,
-            _ => return Err(MihomoError::rules(format!("Unknown rule type: {}", parts[0]))),
+            _ => {
+                return Err(MihomoError::rules(format!(
+                    "Unknown rule type: {}",
+                    parts[0]
+                )))
+            }
         };
-        
+
         let payload = parts[1].to_string();
         let target = parts[2].to_string();
         let options = if parts.len() > 3 {
@@ -324,10 +347,10 @@ impl RuleEngine {
         } else {
             None
         };
-        
+
         // 验证载荷格式
         self.validate_payload(&rule_type, &payload)?;
-        
+
         Ok(ParsedRule {
             rule_type,
             payload,
@@ -343,21 +366,28 @@ impl RuleEngine {
                 // 验证 CIDR 格式
                 let parts: Vec<&str> = payload.split('/').collect();
                 if parts.len() != 2 {
-                    return Err(MihomoError::rules("CIDR must be in format IP/PREFIX".to_string()));
+                    return Err(MihomoError::rules(
+                        "CIDR must be in format IP/PREFIX".to_string(),
+                    ));
                 }
-                
+
                 IpAddr::from_str(parts[0])
                     .map_err(|_| MihomoError::rules("Invalid IP address in CIDR".to_string()))?;
-                
-                let prefix: u8 = parts[1].parse()
+
+                let prefix: u8 = parts[1]
+                    .parse()
                     .map_err(|_| MihomoError::rules("Invalid prefix length".to_string()))?;
-                
+
                 match IpAddr::from_str(parts[0])? {
                     IpAddr::V4(_) if prefix > 32 => {
-                        return Err(MihomoError::rules("IPv4 prefix cannot exceed 32".to_string()));
+                        return Err(MihomoError::rules(
+                            "IPv4 prefix cannot exceed 32".to_string(),
+                        ));
                     }
                     IpAddr::V6(_) if prefix > 128 => {
-                        return Err(MihomoError::rules("IPv6 prefix cannot exceed 128".to_string()));
+                        return Err(MihomoError::rules(
+                            "IPv6 prefix cannot exceed 128".to_string(),
+                        ));
                     }
                     _ => {}
                 }
@@ -367,30 +397,38 @@ impl RuleEngine {
                 if payload.contains('-') {
                     let parts: Vec<&str> = payload.split('-').collect();
                     if parts.len() != 2 {
-                        return Err(MihomoError::rules("Port range must be in format START-END".to_string()));
+                        return Err(MihomoError::rules(
+                            "Port range must be in format START-END".to_string(),
+                        ));
                     }
-                    
-                    let start: u16 = parts[0].parse()
+
+                    let start: u16 = parts[0]
+                        .parse()
                         .map_err(|_| MihomoError::rules("Invalid start port".to_string()))?;
-                    let end: u16 = parts[1].parse()
+                    let end: u16 = parts[1]
+                        .parse()
                         .map_err(|_| MihomoError::rules("Invalid end port".to_string()))?;
-                    
+
                     if start > end {
-                        return Err(MihomoError::rules("Start port cannot be greater than end port".to_string()));
+                        return Err(MihomoError::rules(
+                            "Start port cannot be greater than end port".to_string(),
+                        ));
                     }
                 } else if payload.contains(',') {
                     for port_str in payload.split(',') {
-                        port_str.trim().parse::<u16>()
-                            .map_err(|_| MihomoError::rules(format!("Invalid port: {}", port_str)))?;
+                        port_str.trim().parse::<u16>().map_err(|_| {
+                            MihomoError::rules(format!("Invalid port: {}", port_str))
+                        })?;
                     }
                 } else {
-                    payload.parse::<u16>()
+                    payload
+                        .parse::<u16>()
                         .map_err(|_| MihomoError::rules("Invalid port number".to_string()))?;
                 }
             }
             _ => {} // 其他类型暂不验证
         }
-        
+
         Ok(())
     }
 }
@@ -423,6 +461,7 @@ pub struct RuleStats {
 mod tests {
     use super::*;
     use crate::MihomoClient;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn test_rule_engine_creation() {
@@ -435,14 +474,14 @@ mod tests {
     fn test_domain_suffix_match() {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let engine = RuleEngine::new(client);
-        
+
         let rule = Rule {
             rule_type: RuleType::DomainSuffix,
             payload: "google.com".to_string(),
             proxy: "Proxy".to_string(),
             size: 0,
         };
-        
+
         assert!(engine.match_domain_suffix(&rule, "www.google.com").unwrap());
         assert!(engine.match_domain_suffix(&rule, "google.com").unwrap());
         assert!(!engine.match_domain_suffix(&rule, "google.com.cn").unwrap());
@@ -452,7 +491,7 @@ mod tests {
     fn test_ip_cidr_validation() {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let engine = RuleEngine::new(client);
-        
+
         let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
         assert!(engine.is_ip_in_cidr(ip, "192.168.1.0/24").unwrap());
         assert!(!engine.is_ip_in_cidr(ip, "192.168.2.0/24").unwrap());
@@ -462,10 +501,10 @@ mod tests {
     fn test_rule_validation() {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let engine = RuleEngine::new(client);
-        
+
         let valid_rule = "DOMAIN-SUFFIX,google.com,Proxy";
         assert!(engine.validate_rule(valid_rule).is_ok());
-        
+
         let invalid_rule = "INVALID-TYPE,google.com,Proxy";
         assert!(engine.validate_rule(invalid_rule).is_err());
     }
