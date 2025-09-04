@@ -1,5 +1,6 @@
 name: Release
-
+permissions:
+  
 on:
   push:
     tags:
@@ -32,9 +33,9 @@ jobs:
     
     - name: Run tests
       run: cargo test --release
-    
+
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: target/release/mihomo-rs
         generate_release_notes: true
