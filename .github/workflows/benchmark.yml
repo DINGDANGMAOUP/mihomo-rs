@@ -29,13 +29,13 @@ jobs:
       run: cargo install cargo-criterion
     
     - name: Run benchmarks
-      run: cargo criterion --output-format json
+      run: cargo criterion
     
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
-        tool: 'cargo'
-        output-file-path: target/criterion/reports/benchmark.json
+        tool: 'criterion'
+        output-file-path: target/criterion/*/raw.csv
         github-token: ${{ secrets.GITHUB_TOKEN }}
         auto-push: true
         comment-on-alert: true
@@ -64,7 +64,7 @@ jobs:
         ms_print massif.out > memory_report.txt
     
     - name: Upload memory report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: memory-report
         path: memory_report.txt
