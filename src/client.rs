@@ -8,6 +8,10 @@ use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use url::Url;
+use futures_util::stream::StreamExt;
+use std::pin::Pin;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio_util::io::StreamReader;
 
 /// Mihomo API 客户端
 #[derive(Debug, Clone)]
@@ -207,8 +211,13 @@ impl MihomoClient {
 
     /// 获取连接列表
     pub async fn connections(&self) -> Result<Vec<Connection>> {
-        let response: HashMap<String, Vec<Connection>> = self.get("/connections").await?;
-        Ok(response.get("connections").cloned().unwrap_or_default())
+        let response: ConnectionsResponse = self.get("/connections").await?;
+        Ok(response.connections.unwrap_or_default())
+    }
+
+    /// 获取连接详细信息（包含统计数据）
+    pub async fn connections_with_stats(&self) -> Result<ConnectionsResponse> {
+        self.get("/connections").await
     }
 
     /// 关闭指定连接
@@ -222,14 +231,92 @@ impl MihomoClient {
         self.delete("/connections").await
     }
 
-    /// 获取流量统计
-    pub async fn traffic(&self) -> Result<Traffic> {
-        self.get("/traffic").await
+    /// 获取流量统计流（持续监控）
+    /// 注意：/traffic 接口是流式接口，建议使用此方法进行持续监控
+    pub async fn traffic_stream(&self) -> Result<Pin<Box<dyn futures_util::Stream<Item = Result<Traffic>> + Send>>> {
+        let url = self.build_url("/traffic")?;
+        let mut request = self.client.get(url);
+        
+        if let Some(secret) = &self.secret {
+            request = request.header("Authorization", format!("Bearer {}", secret));
+        }
+        
+        let response = request.send().await?;
+        
+        if !response.status().is_success() {
+            return Err(MihomoError::network(format!(
+                "HTTP {} - {}",
+                response.status().as_u16(),
+                response.text().await.unwrap_or_default()
+            )));
+        }
+        
+        let stream = response.bytes_stream();
+        let reader = BufReader::new(StreamReader::new(stream.map(|result| {
+            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        })));
+        
+        Ok(Box::pin(futures_util::stream::unfold(reader, |mut reader| async move {
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => None, // EOF
+                Ok(_) => {
+                    let line = line.trim();
+                    if line.is_empty() {
+                         return Some((Err(MihomoError::internal("Empty line")), reader));
+                     }
+                     match serde_json::from_str::<Traffic>(line) {
+                         Ok(traffic) => Some((Ok(traffic), reader)),
+                         Err(e) => Some((Err(MihomoError::Json(e)), reader)),
+                     }
+                 }
+                 Err(e) => Some((Err(MihomoError::internal(e.to_string())), reader)),
+            }
+        })))
     }
 
-    /// 获取内存使用情况
-    pub async fn memory(&self) -> Result<Memory> {
-        self.get("/memory").await
+    /// 获取内存使用情况流（持续监控）
+    /// 注意：/memory 接口是流式接口，建议使用此方法进行持续监控
+    pub async fn memory_stream(&self) -> Result<Pin<Box<dyn futures_util::Stream<Item = Result<Memory>> + Send>>> {
+        let url = self.build_url("/memory")?;
+        let mut request = self.client.get(url);
+        
+        if let Some(secret) = &self.secret {
+            request = request.header("Authorization", format!("Bearer {}", secret));
+        }
+        
+        let response = request.send().await?;
+        
+        if !response.status().is_success() {
+            return Err(MihomoError::network(format!(
+                "HTTP {} - {}",
+                response.status().as_u16(),
+                response.text().await.unwrap_or_default()
+            )));
+        }
+        
+        let stream = response.bytes_stream();
+        let reader = BufReader::new(StreamReader::new(stream.map(|result| {
+            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        })));
+        
+        Ok(Box::pin(futures_util::stream::unfold(reader, |mut reader| async move {
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => None, // EOF
+                Ok(_) => {
+                    let line = line.trim();
+                    if line.is_empty() {
+                         return Some((Err(MihomoError::internal("Empty line")), reader));
+                     }
+                     match serde_json::from_str::<Memory>(line) {
+                         Ok(memory) => Some((Ok(memory), reader)),
+                         Err(e) => Some((Err(MihomoError::Json(e)), reader)),
+                     }
+                 }
+                 Err(e) => Some((Err(MihomoError::internal(e.to_string())), reader)),
+            }
+        })))
     }
 
     /// 测试代理延迟

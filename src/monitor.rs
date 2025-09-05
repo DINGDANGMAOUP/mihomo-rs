@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time;
+use futures_util::StreamExt;
+use tokio::time::timeout;
 
 /// 监控管理器
 #[derive(Debug)]
@@ -297,7 +299,7 @@ impl Monitor {
 
         // 收集流量数据
         if self.config.enable_traffic_monitor {
-            if let Ok(traffic) = self.client.traffic().await {
+            if let Ok(traffic) = self.get_traffic().await {
                 let snapshot = TrafficSnapshot {
                     timestamp: now,
                     upload_speed: traffic.up,
@@ -327,7 +329,7 @@ impl Monitor {
 
         // 收集内存数据
         if self.config.enable_memory_monitor {
-            if let Ok(memory) = self.client.memory().await {
+            if let Ok(memory) = self.get_memory().await {
                 let usage_percentage = if memory.os_limit > 0 {
                     (memory.in_use as f64 / memory.os_limit as f64) * 100.0
                 } else {
@@ -409,8 +411,8 @@ impl Monitor {
     /// 获取当前系统状态
     pub async fn get_system_status(&self) -> Result<SystemStatus> {
         let version = self.client.version().await?;
-        let traffic = self.client.traffic().await?;
-        let memory = self.client.memory().await?;
+        let traffic = self.get_traffic().await?;
+        let memory = self.get_memory().await?;
         let connections = self.client.connections().await?;
 
         // 计算健康状态
@@ -568,6 +570,48 @@ impl Monitor {
             .iter()
             .filter(|e| e.level >= level)
             .collect()
+    }
+
+    /// 从流式接口获取单次流量数据（跳过第一条数据以避免初始值为0）
+    async fn get_traffic(&self) -> Result<Traffic> {
+        let mut stream = self.client.traffic_stream().await?;
+        
+        // 跳过第一条数据，因为可能为0
+        match timeout(Duration::from_secs(2), stream.next()).await {
+            Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+            Ok(Some(Err(e))) => return Err(e),
+            Ok(None) => return Err(MihomoError::internal("Traffic stream ended before first data")),
+            Err(_) => return Err(MihomoError::internal("Timeout getting first traffic data")),
+        }
+        
+        // 获取第二条数据
+        match timeout(Duration::from_secs(3), stream.next()).await {
+            Ok(Some(Ok(traffic))) => Ok(traffic),
+            Ok(Some(Err(e))) => Err(e),
+            Ok(None) => Err(MihomoError::internal("Traffic stream ended after first data")),
+            Err(_) => Err(MihomoError::internal("Timeout getting second traffic data")),
+        }
+    }
+
+    /// 从流式接口获取单次内存数据（跳过第一条数据以避免初始值为0）
+    async fn get_memory(&self) -> Result<Memory> {
+        let mut stream = self.client.memory_stream().await?;
+        
+        // 跳过第一条数据，因为可能为0
+        match timeout(Duration::from_secs(2), stream.next()).await {
+            Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+            Ok(Some(Err(e))) => return Err(e),
+            Ok(None) => return Err(MihomoError::internal("Memory stream ended before first data")),
+            Err(_) => return Err(MihomoError::internal("Timeout getting first memory data")),
+        }
+        
+        // 获取第二条数据
+        match timeout(Duration::from_secs(3), stream.next()).await {
+            Ok(Some(Ok(memory))) => Ok(memory),
+            Ok(Some(Err(e))) => Err(e),
+            Ok(None) => Err(MihomoError::internal("Memory stream ended after first data")),
+            Err(_) => Err(MihomoError::internal("Timeout getting second memory data")),
+        }
     }
 }
 
