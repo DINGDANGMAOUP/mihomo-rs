@@ -530,7 +530,7 @@ async fn handle_monitor(
                 }
 
                 // 输出当前状态
-                println!("📊 系统状态 [{}]:", chrono::Utc::now().format("%H:%M:%S"));
+                println!("📊 系统状态 [{}]:", chrono::Local::now().format("%H:%M:%S"));
                 println!("  版本: {}", status.version.version);
                 println!("  上传: {} MB/s", status.traffic.up / 1024 / 1024);
                 println!("  下载: {} MB/s", status.traffic.down / 1024 / 1024);
