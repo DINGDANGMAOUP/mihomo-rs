@@ -492,6 +492,21 @@ pub struct ApiResponse<T> {
     pub data: T,
 }
 
+/// 连接响应结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionsResponse {
+    /// 下载总量
+    #[serde(rename = "downloadTotal")]
+    pub download_total: u64,
+    /// 上传总量
+    #[serde(rename = "uploadTotal")]
+    pub upload_total: u64,
+    /// 连接列表（可能为 null）
+    pub connections: Option<Vec<Connection>>,
+    /// 内存使用量
+    pub memory: u64,
+}
+
 /// 空响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmptyResponse {}

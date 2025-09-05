@@ -2,11 +2,13 @@
 //!
 //! 演示如何使用 mihomo-rs SDK 的基本功能
 
+use futures_util::StreamExt;
 use mihomo_rs::{
     client::MihomoClient, config::ConfigManager, monitor::Monitor, proxy::ProxyManager,
     rules::RuleEngine, utils::format_utils, MihomoError,
 };
 use std::time::Duration;
+use tokio::time::timeout;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// 获取系统状态
 async fn get_system_status(client: &MihomoClient) {
     // 获取流量信息
-    match client.traffic().await {
+    match get_traffic(client).await {
         Ok(traffic) => {
             println!("   上传速度: {}", format_utils::format_speed(traffic.up));
             println!("   下载速度: {}", format_utils::format_speed(traffic.down));
@@ -65,7 +67,7 @@ async fn get_system_status(client: &MihomoClient) {
     }
 
     // 获取内存使用情况
-    match client.memory().await {
+    match get_memory(client).await {
         Ok(memory) => {
             println!("   内存使用: {}", format_utils::format_bytes(memory.in_use));
             println!(
@@ -394,4 +396,46 @@ fn utils_example() {
 
     let random_id = random_utils::generate_id();
     println!("   随机ID: {}", random_id);
+}
+
+/// 从流式接口获取单次流量数据（跳过第一条数据以避免初始值为0）
+async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic, MihomoError> {
+    let mut stream = client.traffic_stream().await?;
+    
+    // 跳过第一条数据，因为可能为0
+    match timeout(Duration::from_secs(3), stream.next()).await {
+        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Err(e))) => return Err(e),
+        Ok(None) => return Err(MihomoError::internal("Traffic stream ended before first data")),
+        Err(_) => return Err(MihomoError::internal("Timeout getting first traffic data")),
+    }
+    
+    // 获取第二条数据
+    match timeout(Duration::from_secs(5), stream.next()).await {
+        Ok(Some(Ok(traffic))) => Ok(traffic),
+        Ok(Some(Err(e))) => Err(e),
+        Ok(None) => Err(MihomoError::internal("Traffic stream ended after first data")),
+        Err(_) => Err(MihomoError::internal("Timeout getting second traffic data")),
+    }
+}
+
+/// 从流式接口获取单次内存数据（跳过第一条数据以避免初始值为0）
+async fn get_memory(client: &MihomoClient) -> Result<mihomo_rs::types::Memory, MihomoError> {
+    let mut stream = client.memory_stream().await?;
+    
+    // 跳过第一条数据，因为可能为0
+    match timeout(Duration::from_secs(3), stream.next()).await {
+        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Err(e))) => return Err(e),
+        Ok(None) => return Err(MihomoError::internal("Memory stream ended before first data")),
+        Err(_) => return Err(MihomoError::internal("Timeout getting first memory data")),
+    }
+    
+    // 获取第二条数据
+    match timeout(Duration::from_secs(5), stream.next()).await {
+        Ok(Some(Ok(memory))) => Ok(memory),
+        Ok(Some(Err(e))) => Err(e),
+        Ok(None) => Err(MihomoError::internal("Memory stream ended after first data")),
+        Err(_) => Err(MihomoError::internal("Timeout getting second memory data")),
+    }
 }

@@ -3,11 +3,19 @@
 //! 提供 mihomo 代理服务的管理功能
 
 use clap::{Parser, Subcommand};
+use crossterm::{
+    cursor,
+    terminal::{self, ClearType},
+    ExecutableCommand,
+};
+use futures_util::StreamExt;
 use mihomo_rs::{
     client::MihomoClient, config::ConfigManager, init_logger, monitor::Monitor,
     proxy::ProxyManager, rules::RuleEngine, service::ServiceManager,
 };
+use std::io::{self, Write};
 use std::time::Duration;
+use tokio::time::timeout;
 
 /// Mihomo RS 命令行工具
 #[derive(Parser)]
@@ -210,6 +218,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// 从流式接口获取单次流量数据（跳过第一条数据以避免初始值为0）
+async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic, Box<dyn std::error::Error>> {
+    let mut stream = client.traffic_stream().await?;
+    
+    // 跳过第一条数据，因为可能为0
+    match timeout(Duration::from_secs(3), stream.next()).await {
+        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Err(e))) => return Err(Box::new(e)),
+        Ok(None) => return Err("Traffic stream ended before first data".into()),
+        Err(_) => return Err("Timeout getting first traffic data".into()),
+    }
+    
+    // 获取第二条数据
+    match timeout(Duration::from_secs(5), stream.next()).await {
+        Ok(Some(Ok(traffic))) => Ok(traffic),
+        Ok(Some(Err(e))) => Err(Box::new(e)),
+        Ok(None) => Err("Traffic stream ended after first data".into()),
+        Err(_) => Err("Timeout getting second traffic data".into()),
+    }
+}
+
+/// 从流式接口获取单次内存数据（跳过第一条数据以避免初始值为0）
+async fn get_memory(client: &MihomoClient) -> Result<mihomo_rs::types::Memory, Box<dyn std::error::Error>> {
+    let mut stream = client.memory_stream().await?;
+    
+    // 跳过第一条数据，因为可能为0
+    match timeout(Duration::from_secs(3), stream.next()).await {
+        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Err(e))) => return Err(Box::new(e)),
+        Ok(None) => return Err("Memory stream ended before first data".into()),
+        Err(_) => return Err("Timeout getting first memory data".into()),
+    }
+    
+    // 获取第二条数据
+    match timeout(Duration::from_secs(5), stream.next()).await {
+        Ok(Some(Ok(memory))) => Ok(memory),
+        Ok(Some(Err(e))) => Err(Box::new(e)),
+        Ok(None) => Err("Memory stream ended after first data".into()),
+        Err(_) => Err("Timeout getting second memory data".into()),
+    }
+}
+
 /// 处理版本命令
 async fn handle_version(
     service_manager: &mut ServiceManager,
@@ -358,8 +408,8 @@ async fn handle_status(client: &MihomoClient) -> Result<(), Box<dyn std::error::
     println!("🔍 获取服务状态...");
 
     let version = client.version().await?;
-    let traffic = client.traffic().await?;
-    let memory = client.memory().await?;
+    let traffic = get_traffic(client).await?;
+    let memory = get_memory(client).await?;
 
     println!("\n📊 Mihomo 服务状态:");
     println!("版本: {}", version.version);
@@ -456,30 +506,55 @@ async fn handle_monitor(
     duration: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 开始监控服务 (间隔: {}s, 持续: {}s)", interval, duration);
+    println!("按 Ctrl+C 可提前退出监控\n");
 
     let monitor = Monitor::new(client.clone());
     let start_time = std::time::Instant::now();
+    let mut first_run = true;
+    let mut stdout = io::stdout();
 
     while start_time.elapsed().as_secs() < duration {
         match monitor.get_system_status().await {
             Ok(status) => {
-                println!("\n📊 系统状态 [{}]:", chrono::Utc::now().format("%H:%M:%S"));
+                // 如果不是第一次运行，清除之前的输出
+                if !first_run {
+                    // 向上移动8行并清除从光标到屏幕底部的内容
+                    stdout.execute(cursor::MoveUp(8))?;
+                    stdout.execute(terminal::Clear(ClearType::FromCursorDown))?;
+                } else {
+                    first_run = false;
+                }
+                
+                // 输出当前状态
+                println!("📊 系统状态 [{}]:", chrono::Utc::now().format("%H:%M:%S"));
                 println!("  版本: {}", status.version.version);
                 println!("  上传: {} MB/s", status.traffic.up / 1024 / 1024);
                 println!("  下载: {} MB/s", status.traffic.down / 1024 / 1024);
                 println!("  内存: {} MB", status.memory.in_use / 1024 / 1024);
                 println!("  连接数: {}", status.active_connections);
                 println!("  健康状态: {:?}", status.health);
+                println!();
+                
+                // 刷新输出缓冲区
+                stdout.flush()?;
             }
             Err(e) => {
+                if !first_run {
+                    stdout.execute(cursor::MoveUp(2))?;
+                    stdout.execute(terminal::Clear(ClearType::FromCursorDown))?;
+                } else {
+                    first_run = false;
+                }
                 println!("❌ 获取状态失败: {}", e);
+                println!();
+                stdout.flush()?;
             }
         }
 
         tokio::time::sleep(Duration::from_secs(interval)).await;
     }
 
-    println!("\n✅ 监控完成");
+    println!("✅ 监控完成");
     Ok(())
 }
 
