@@ -358,11 +358,4 @@ cargo test --test performance_tests
 3. 创建新的 [Issue](https://github.com/DINGDANGMAOUP/mihomo-rs/issues/new)
 ## 更新日志
 
-### v0.1.0
-
-- 初始版本发布
-- 完整的 SDK 功能
-- 命令行工具
-- 服务管理功能
-- 版本管理和升级功能
-- 配置管理和监控功能
+[CHANGELOG](./CHANGELOG.md)
