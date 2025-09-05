@@ -5,13 +5,6 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
-
-### 计划中
-- 支持更多代理协议
-- 图形界面支持
-- 插件系统
-- 配置文件模板
 
 ## [0.1.0] - 2025-09-04
 
