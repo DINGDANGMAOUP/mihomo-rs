@@ -401,20 +401,26 @@ fn utils_example() {
 /// 从流式接口获取单次流量数据（跳过第一条数据以避免初始值为0）
 async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic, MihomoError> {
     let mut stream = client.traffic_stream().await?;
-    
+
     // 跳过第一条数据，因为可能为0
     match timeout(Duration::from_secs(3), stream.next()).await {
-        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Ok(_))) => {} // 丢弃第一条数据
         Ok(Some(Err(e))) => return Err(e),
-        Ok(None) => return Err(MihomoError::internal("Traffic stream ended before first data")),
+        Ok(None) => {
+            return Err(MihomoError::internal(
+                "Traffic stream ended before first data",
+            ))
+        }
         Err(_) => return Err(MihomoError::internal("Timeout getting first traffic data")),
     }
-    
+
     // 获取第二条数据
     match timeout(Duration::from_secs(5), stream.next()).await {
         Ok(Some(Ok(traffic))) => Ok(traffic),
         Ok(Some(Err(e))) => Err(e),
-        Ok(None) => Err(MihomoError::internal("Traffic stream ended after first data")),
+        Ok(None) => Err(MihomoError::internal(
+            "Traffic stream ended after first data",
+        )),
         Err(_) => Err(MihomoError::internal("Timeout getting second traffic data")),
     }
 }
@@ -422,20 +428,26 @@ async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic,
 /// 从流式接口获取单次内存数据（跳过第一条数据以避免初始值为0）
 async fn get_memory(client: &MihomoClient) -> Result<mihomo_rs::types::Memory, MihomoError> {
     let mut stream = client.memory_stream().await?;
-    
+
     // 跳过第一条数据，因为可能为0
     match timeout(Duration::from_secs(3), stream.next()).await {
-        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Ok(_))) => {} // 丢弃第一条数据
         Ok(Some(Err(e))) => return Err(e),
-        Ok(None) => return Err(MihomoError::internal("Memory stream ended before first data")),
+        Ok(None) => {
+            return Err(MihomoError::internal(
+                "Memory stream ended before first data",
+            ))
+        }
         Err(_) => return Err(MihomoError::internal("Timeout getting first memory data")),
     }
-    
+
     // 获取第二条数据
     match timeout(Duration::from_secs(5), stream.next()).await {
         Ok(Some(Ok(memory))) => Ok(memory),
         Ok(Some(Err(e))) => Err(e),
-        Ok(None) => Err(MihomoError::internal("Memory stream ended after first data")),
+        Ok(None) => Err(MihomoError::internal(
+            "Memory stream ended after first data",
+        )),
         Err(_) => Err(MihomoError::internal("Timeout getting second memory data")),
     }
 }

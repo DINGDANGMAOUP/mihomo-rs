@@ -1,5 +1,5 @@
 //! 流式接口使用示例
-//! 
+//!
 //! 本示例演示如何使用 mihomo-rs SDK 的流式接口来持续监控流量和内存使用情况。
 //! 这些接口会持续返回数据流，适合用于实时监控场景。
 
@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
 async fn monitor_traffic_stream(client: &MihomoClient) -> Result<()> {
     let stream = client.traffic_stream().await?;
     let mut stream = stream.take(10); // 只取前10个数据点
-    
+
     let mut count = 0;
     while let Some(result) = stream.next().await {
         match result {
@@ -78,7 +78,7 @@ async fn monitor_traffic_stream(client: &MihomoClient) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -86,7 +86,7 @@ async fn monitor_traffic_stream(client: &MihomoClient) -> Result<()> {
 async fn monitor_memory_stream(client: &MihomoClient) -> Result<()> {
     let stream = client.memory_stream().await?;
     let mut stream = stream.take(10); // 只取前10个数据点
-    
+
     let mut count = 0;
     while let Some(result) = stream.next().await {
         match result {
@@ -108,7 +108,7 @@ async fn monitor_memory_stream(client: &MihomoClient) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -116,14 +116,14 @@ async fn monitor_memory_stream(client: &MihomoClient) -> Result<()> {
 async fn monitor_both_streams(client: &MihomoClient) -> Result<()> {
     let traffic_stream = client.traffic_stream().await?;
     let memory_stream = client.memory_stream().await?;
-    
+
     // 使用 select! 宏来同时处理两个流
     let mut traffic_stream = traffic_stream.take(15);
     let mut memory_stream = memory_stream.take(15);
-    
+
     let mut traffic_count = 0;
     let mut memory_count = 0;
-    
+
     // 设置超时时间
     let monitor_future = async {
         loop {
@@ -170,32 +170,32 @@ async fn monitor_both_streams(client: &MihomoClient) -> Result<()> {
             }
         }
     };
-    
+
     // 设置15秒超时
     match timeout(Duration::from_secs(15), monitor_future).await {
         Ok(_) => println!("✅ 监控正常结束"),
         Err(_) => println!("⏰ 监控超时结束"),
     }
-    
+
     Ok(())
 }
 
 /// 格式化字节数为可读格式
 fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-    
+
     if bytes == 0 {
         return "0 B".to_string();
     }
-    
+
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= 1024.0 && unit_index < UNITS.len() - 1 {
         size /= 1024.0;
         unit_index += 1;
     }
-    
+
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {

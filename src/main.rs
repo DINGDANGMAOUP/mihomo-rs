@@ -219,17 +219,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// 从流式接口获取单次流量数据（跳过第一条数据以避免初始值为0）
-async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic, Box<dyn std::error::Error>> {
+async fn get_traffic(
+    client: &MihomoClient,
+) -> Result<mihomo_rs::types::Traffic, Box<dyn std::error::Error>> {
     let mut stream = client.traffic_stream().await?;
-    
+
     // 跳过第一条数据，因为可能为0
     match timeout(Duration::from_secs(3), stream.next()).await {
-        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Ok(_))) => {} // 丢弃第一条数据
         Ok(Some(Err(e))) => return Err(Box::new(e)),
         Ok(None) => return Err("Traffic stream ended before first data".into()),
         Err(_) => return Err("Timeout getting first traffic data".into()),
     }
-    
+
     // 获取第二条数据
     match timeout(Duration::from_secs(5), stream.next()).await {
         Ok(Some(Ok(traffic))) => Ok(traffic),
@@ -240,17 +242,19 @@ async fn get_traffic(client: &MihomoClient) -> Result<mihomo_rs::types::Traffic,
 }
 
 /// 从流式接口获取单次内存数据（跳过第一条数据以避免初始值为0）
-async fn get_memory(client: &MihomoClient) -> Result<mihomo_rs::types::Memory, Box<dyn std::error::Error>> {
+async fn get_memory(
+    client: &MihomoClient,
+) -> Result<mihomo_rs::types::Memory, Box<dyn std::error::Error>> {
     let mut stream = client.memory_stream().await?;
-    
+
     // 跳过第一条数据，因为可能为0
     match timeout(Duration::from_secs(3), stream.next()).await {
-        Ok(Some(Ok(_))) => {}, // 丢弃第一条数据
+        Ok(Some(Ok(_))) => {} // 丢弃第一条数据
         Ok(Some(Err(e))) => return Err(Box::new(e)),
         Ok(None) => return Err("Memory stream ended before first data".into()),
         Err(_) => return Err("Timeout getting first memory data".into()),
     }
-    
+
     // 获取第二条数据
     match timeout(Duration::from_secs(5), stream.next()).await {
         Ok(Some(Ok(memory))) => Ok(memory),
@@ -524,7 +528,7 @@ async fn handle_monitor(
                 } else {
                     first_run = false;
                 }
-                
+
                 // 输出当前状态
                 println!("📊 系统状态 [{}]:", chrono::Utc::now().format("%H:%M:%S"));
                 println!("  版本: {}", status.version.version);
@@ -534,7 +538,7 @@ async fn handle_monitor(
                 println!("  连接数: {}", status.active_connections);
                 println!("  健康状态: {:?}", status.health);
                 println!();
-                
+
                 // 刷新输出缓冲区
                 stdout.flush()?;
             }
