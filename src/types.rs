@@ -468,9 +468,6 @@ pub struct Memory {
 pub struct Version {
     /// 版本号
     pub version: String,
-    /// 高级版本
-    #[serde(default)]
-    pub premium: bool,
     /// 元数据
     pub meta: bool,
 }

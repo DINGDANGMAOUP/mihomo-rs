@@ -23,7 +23,6 @@ async fn main() -> Result<()> {
         Ok(version) => {
             println!("✅ 连接到 Mihomo 成功");
             println!("版本: {}", version.version);
-            println!("高级版本: {}", if version.premium { "是" } else { "否" });
         }
         Err(e) => {
             println!("❌ 连接失败: {}", e);

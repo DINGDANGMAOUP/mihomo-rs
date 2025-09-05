@@ -26,7 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match client.version().await {
         Ok(version) => {
             println!("   版本: {}", version.version);
-            println!("   高级版本: {}", version.premium);
         }
         Err(e) => println!("   获取版本信息失败: {}", e),
     }
