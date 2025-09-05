@@ -254,9 +254,9 @@ impl MihomoClient {
         }
 
         let stream = response.bytes_stream();
-        let reader = BufReader::new(StreamReader::new(stream.map(|result| {
-            result.map_err(std::io::Error::other)
-        })));
+        let reader = BufReader::new(StreamReader::new(
+            stream.map(|result| result.map_err(std::io::Error::other)),
+        ));
 
         Ok(Box::pin(futures_util::stream::unfold(
             reader,
@@ -303,9 +303,9 @@ impl MihomoClient {
         }
 
         let stream = response.bytes_stream();
-        let reader = BufReader::new(StreamReader::new(stream.map(|result| {
-            result.map_err(std::io::Error::other)
-        })));
+        let reader = BufReader::new(StreamReader::new(
+            stream.map(|result| result.map_err(std::io::Error::other)),
+        ));
 
         Ok(Box::pin(futures_util::stream::unfold(
             reader,
