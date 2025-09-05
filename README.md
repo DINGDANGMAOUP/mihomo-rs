@@ -282,7 +282,7 @@ rules:
 
 ```bash
 # 克隆项目
-git clone https://github.com/mihomo-rs/mihomo-rs.git
+git clone https://github.com/DINGDANGMAOUP/mihomo-rs.git
 cd mihomo-rs
 
 # 构建
