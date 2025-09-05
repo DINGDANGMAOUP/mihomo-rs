@@ -102,5 +102,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
+    - name: Clean up binary files before publish
+      run: |
+        rm -f mihomo-rs-linux-x64
+        rm -f mihomo-rs-windows-x64.exe
+        rm -f mihomo-rs-macos-x64
+        rm -f mihomo-rs-macos-arm64
+    
     - name: Publish to crates.io
       run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
