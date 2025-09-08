@@ -84,7 +84,7 @@ impl RetryPolicy {
 }
 
 /// 重试执行器
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RetryExecutor {
     policy: RetryPolicy,
 }
@@ -93,13 +93,6 @@ impl RetryExecutor {
     /// 创建新的重试执行器
     pub fn new(policy: RetryPolicy) -> Self {
         Self { policy }
-    }
-
-    /// 使用默认策略创建重试执行器
-    pub fn default() -> Self {
-        Self {
-            policy: RetryPolicy::default(),
-        }
     }
 
     /// 执行带重试的异步操作

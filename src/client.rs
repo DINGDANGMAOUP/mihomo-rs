@@ -154,9 +154,9 @@ impl MihomoClient {
                             .await
                             .map_err(|e| MihomoError::network(format!("读取响应失败: {}", e)))?;
                         if text.is_empty() {
-                            serde_json::from_str("{}").map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str("{}").map_err(MihomoError::Json)
                         } else {
-                            serde_json::from_str(&text).map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str(&text).map_err(MihomoError::Json)
                         }
                     } else {
                         let status = response.status();
@@ -179,7 +179,7 @@ impl MihomoClient {
         B: serde::Serialize,
     {
         let url = self.build_url(path)?;
-        let body_json = serde_json::to_value(body).map_err(|e| MihomoError::Json(e))?;
+        let body_json = serde_json::to_value(body).map_err(MihomoError::Json)?;
         let client = self.client.clone();
         let secret = self.secret.clone();
 
@@ -208,9 +208,9 @@ impl MihomoClient {
                             .await
                             .map_err(|e| MihomoError::network(format!("读取响应失败: {}", e)))?;
                         if text.is_empty() {
-                            serde_json::from_str("{}").map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str("{}").map_err(MihomoError::Json)
                         } else {
-                            serde_json::from_str(&text).map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str(&text).map_err(MihomoError::Json)
                         }
                     } else {
                         let status = response.status();
@@ -232,7 +232,7 @@ impl MihomoClient {
         B: serde::Serialize,
     {
         let url = self.build_url(path)?;
-        let body_json = serde_json::to_value(body).map_err(|e| MihomoError::Json(e))?;
+        let body_json = serde_json::to_value(body).map_err(MihomoError::Json)?;
         let client = self.client.clone();
         let secret = self.secret.clone();
 
@@ -261,9 +261,9 @@ impl MihomoClient {
                             .await
                             .map_err(|e| MihomoError::network(format!("读取响应失败: {}", e)))?;
                         if text.is_empty() {
-                            serde_json::from_str("{}").map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str("{}").map_err(MihomoError::Json)
                         } else {
-                            serde_json::from_str(&text).map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str(&text).map_err(MihomoError::Json)
                         }
                     } else {
                         let status = response.status();
@@ -313,7 +313,7 @@ impl MihomoClient {
                         if text.is_empty() {
                             Ok(T::default())
                         } else {
-                            serde_json::from_str(&text).map_err(|e| MihomoError::Json(e))
+                            serde_json::from_str(&text).map_err(MihomoError::Json)
                         }
                     } else {
                         let status = response.status();

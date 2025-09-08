@@ -499,7 +499,7 @@ async fn handle_config_list_backups() -> Result<(), Box<dyn std::error::Error>> 
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "yaml") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "yaml") {
             let metadata = entry.metadata()?;
             let modified = metadata.modified()?;
             let datetime: DateTime<Local> = modified.into();
@@ -534,8 +534,8 @@ async fn handle_config_list_backups() -> Result<(), Box<dyn std::error::Error>> 
     backups.sort_by(|a, b| b.1.cmp(&a.1));
 
     println!(
-        "\n{:<30} {:<20} {:<15} {}",
-        "文件名", "创建时间", "大小", "描述"
+        "\n{:<30} {:<20} {:<15} 描述",
+        "文件名", "创建时间", "大小"
     );
     println!("{}", "-".repeat(80));
 
