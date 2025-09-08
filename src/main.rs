@@ -533,10 +533,7 @@ async fn handle_config_list_backups() -> Result<(), Box<dyn std::error::Error>> 
     // 按修改时间排序
     backups.sort_by(|a, b| b.1.cmp(&a.1));
 
-    println!(
-        "\n{:<30} {:<20} {:<15} 描述",
-        "文件名", "创建时间", "大小"
-    );
+    println!("\n{:<30} {:<20} {:<15} 描述", "文件名", "创建时间", "大小");
     println!("{}", "-".repeat(80));
 
     for (filename, datetime, description, size) in backups {
