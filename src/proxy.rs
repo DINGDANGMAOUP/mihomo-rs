@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// 代理管理器
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProxyManager {
     /// mihomo 客户端
     client: MihomoClient,

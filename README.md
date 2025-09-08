@@ -8,6 +8,7 @@
 
 ## 特性
 
+### 核心功能
 - 🚀 **完整的 SDK**：提供配置管理、代理控制、规则引擎和监控功能
 - 🛠️ **命令行工具**：功能丰富的 CLI 工具，支持服务管理和代理控制
 - 📦 **服务管理**：自动下载、安装、启动、停止、升级和卸载 mihomo 服务
@@ -15,6 +16,14 @@
 - 📊 **实时监控**：提供连接状态、流量统计和性能监控
 - 🎯 **规则引擎**：支持复杂的流量分流规则
 - 🔧 **配置管理**：完整的配置文件解析和管理功能
+
+### v0.1.2 新增特性
+- 🤖 **智能代理选择**：自动选择最优代理，支持批量延迟测试
+- 📈 **高级监控**：性能统计、健康检查、实时数据分析
+- 🔍 **规则验证**：规则语法检查、匹配统计、性能分析
+- 📁 **配置备份**：自动备份、版本管理、一键恢复
+- 🛡️ **错误处理**：统一的错误处理机制和结构化日志
+- ✅ **完整测试**：单元测试、集成测试、性能测试全覆盖
 
 ## 安装
 
@@ -24,7 +33,7 @@
 
 ```toml
 [dependencies]
-mihomo-rs = "0.1.0"
+mihomo-rs = "0.1.2"
 ```
 
 ### 作为命令行工具安装
@@ -122,6 +131,12 @@ mihomo-rs proxy switch GLOBAL Shadowsocks
 
 # 测试代理延迟
 mihomo-rs proxy test Shadowsocks
+
+# 批量测试所有代理延迟
+mihomo-rs proxy test-all
+
+# 自动选择最优代理
+mihomo-rs proxy auto-select GLOBAL
 ```
 
 #### 配置管理
@@ -135,6 +150,15 @@ mihomo-rs config reload
 
 # 验证配置文件
 mihomo-rs config validate /path/to/config.yaml
+
+# 备份当前配置
+mihomo-rs config backup
+
+# 恢复配置
+mihomo-rs config restore <backup-id>
+
+# 列出所有备份
+mihomo-rs config list-backups
 ```
 
 #### 监控功能
@@ -143,8 +167,17 @@ mihomo-rs config validate /path/to/config.yaml
 # 实时监控（每5秒刷新，持续60秒）
 mihomo-rs monitor --interval 5 --duration 60
 
-# 查看规则信息
-mihomo-rs rules
+# 性能统计监控
+mihomo-rs monitor --stats
+
+# 健康检查
+mihomo-rs monitor --health
+
+# 查看规则信息和统计
+mihomo-rs rules --stats
+
+# 验证规则语法
+mihomo-rs rules validate
 
 # 查看连接信息
 mihomo-rs connections

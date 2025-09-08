@@ -504,9 +504,303 @@ pub struct ConnectionsResponse {
     pub memory: u64,
 }
 
-/// 空响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// 空响应结构
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmptyResponse {}
+
+/// 日志级别枚举
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    /// 调试级别
+    Debug,
+    /// 信息级别
+    Info,
+    /// 警告级别
+    Warning,
+    /// 错误级别
+    Error,
+    /// 静默级别
+    Silent,
+}
+
+/// 日志条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    /// 日志级别
+    #[serde(rename = "type")]
+    pub level: LogLevel,
+    /// 日志内容
+    pub payload: String,
+    /// 时间戳
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+}
+
+/// 提供者信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Provider {
+    /// 提供者名称
+    pub name: String,
+    /// 提供者类型
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    /// 车辆类型
+    #[serde(rename = "vehicleType")]
+    pub vehicle_type: String,
+    /// 代理数量
+    #[serde(rename = "proxies")]
+    pub proxy_count: usize,
+    /// 更新时间
+    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// 订阅信息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subscription_info: Option<SubscriptionInfo>,
+}
+
+/// 订阅信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionInfo {
+    /// 上传流量
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upload: Option<u64>,
+    /// 下载流量
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download: Option<u64>,
+    /// 总流量
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    /// 过期时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expire: Option<u64>,
+}
+
+/// DNS查询记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsQuery {
+    /// 查询ID
+    pub id: String,
+    /// 查询域名
+    pub name: String,
+    /// 查询类型
+    #[serde(rename = "qtype")]
+    pub query_type: String,
+    /// 查询类
+    #[serde(rename = "qclass")]
+    pub query_class: String,
+    /// 查询时间
+    pub time: String,
+    /// 客户端IP
+    pub client: String,
+}
+
+/// 健康检查结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    /// 是否健康
+    pub alive: bool,
+    /// 延迟（毫秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay: Option<u32>,
+    /// 错误信息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// 提供者健康检查响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderHealthResponse {
+    /// 提供者名称
+    pub name: String,
+    /// 健康检查结果
+    pub proxies: HashMap<String, HealthCheckResult>,
+}
+
+/// 规则提供者信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleProvider {
+    /// 提供者名称
+    pub name: String,
+    /// 提供者类型
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    /// 车辆类型
+    #[serde(rename = "vehicleType")]
+    pub vehicle_type: String,
+    /// 规则数量
+    #[serde(rename = "ruleCount")]
+    pub rule_count: usize,
+    /// 更新时间
+    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// 行为
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub behavior: Option<String>,
+}
+
+/// 规则统计信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleStats {
+    /// 总规则数
+    pub total: usize,
+    /// 按类型分组的规则数
+    pub by_type: HashMap<String, usize>,
+    /// 按代理分组的规则数
+    pub by_proxy: HashMap<String, usize>,
+}
+
+// ===== 服务管理相关类型 =====
+
+/// 版本信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionInfo {
+    /// 版本号
+    pub version: String,
+    /// 构建时间
+    #[serde(rename = "buildTime")]
+    pub build_time: Option<String>,
+    /// Git 提交哈希
+    #[serde(rename = "gitCommit")]
+    pub git_commit: Option<String>,
+    /// Go 版本
+    #[serde(rename = "goVersion")]
+    pub go_version: Option<String>,
+    /// 平台信息
+    pub platform: Option<String>,
+}
+
+/// 运行时信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeInfo {
+    /// 运行时间（秒）
+    pub uptime: u64,
+    /// 内存使用情况
+    pub memory: MemoryUsage,
+    /// Goroutine 数量
+    pub goroutines: u32,
+    /// 垃圾回收统计
+    pub gc: GcStats,
+}
+
+/// 内存使用情况
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryUsage {
+    /// 已分配内存（字节）
+    pub alloc: u64,
+    /// 总分配内存（字节）
+    #[serde(rename = "totalAlloc")]
+    pub total_alloc: u64,
+    /// 系统内存（字节）
+    pub sys: u64,
+    /// 堆内存（字节）
+    #[serde(rename = "heapAlloc")]
+    pub heap_alloc: u64,
+    /// 堆系统内存（字节）
+    #[serde(rename = "heapSys")]
+    pub heap_sys: u64,
+    /// 堆空闲内存（字节）
+    #[serde(rename = "heapIdle")]
+    pub heap_idle: u64,
+    /// 堆使用中内存（字节）
+    #[serde(rename = "heapInuse")]
+    pub heap_inuse: u64,
+}
+
+/// 垃圾回收统计
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GcStats {
+    /// GC 次数
+    #[serde(rename = "numGC")]
+    pub num_gc: u32,
+    /// 上次 GC 时间
+    #[serde(rename = "lastGC")]
+    pub last_gc: u64,
+    /// GC 暂停时间（纳秒）
+    #[serde(rename = "pauseTotal")]
+    pub pause_total: u64,
+}
+
+/// 服务配置信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceConfigInfo {
+    /// 端口
+    pub port: u16,
+    /// SOCKS5 端口
+    #[serde(rename = "socksPort")]
+    pub socks_port: Option<u16>,
+    /// 重定向端口
+    #[serde(rename = "redirPort")]
+    pub redir_port: Option<u16>,
+    /// TProxy 端口
+    #[serde(rename = "tproxyPort")]
+    pub tproxy_port: Option<u16>,
+    /// 混合端口
+    #[serde(rename = "mixedPort")]
+    pub mixed_port: Option<u16>,
+    /// 允许局域网连接
+    #[serde(rename = "allowLan")]
+    pub allow_lan: bool,
+    /// 绑定地址
+    #[serde(rename = "bindAddress")]
+    pub bind_address: String,
+    /// 模式
+    pub mode: String,
+    /// 日志级别
+    #[serde(rename = "logLevel")]
+    pub log_level: String,
+    /// IPv6 支持
+    pub ipv6: bool,
+}
+
+/// 服务配置更新
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceConfigUpdate {
+    /// 端口
+    pub port: Option<u16>,
+    /// SOCKS5 端口
+    #[serde(rename = "socksPort")]
+    pub socks_port: Option<u16>,
+    /// 重定向端口
+    #[serde(rename = "redirPort")]
+    pub redir_port: Option<u16>,
+    /// TProxy 端口
+    #[serde(rename = "tproxyPort")]
+    pub tproxy_port: Option<u16>,
+    /// 混合端口
+    #[serde(rename = "mixedPort")]
+    pub mixed_port: Option<u16>,
+    /// 允许局域网连接
+    #[serde(rename = "allowLan")]
+    pub allow_lan: Option<bool>,
+    /// 绑定地址
+    #[serde(rename = "bindAddress")]
+    pub bind_address: Option<String>,
+    /// 模式
+    pub mode: Option<String>,
+    /// 日志级别
+    #[serde(rename = "logLevel")]
+    pub log_level: Option<String>,
+    /// IPv6 支持
+    pub ipv6: Option<bool>,
+}
+
+/// 服务统计信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceStats {
+    /// 上传字节数
+    pub upload: u64,
+    /// 下载字节数
+    pub download: u64,
+    /// 连接数
+    pub connections: u32,
+    /// 上传速度（字节/秒）
+    #[serde(rename = "uploadSpeed")]
+    pub upload_speed: u64,
+    /// 下载速度（字节/秒）
+    #[serde(rename = "downloadSpeed")]
+    pub download_speed: u64,
+}
 
 #[cfg(test)]
 mod tests {
