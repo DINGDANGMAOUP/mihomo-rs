@@ -167,14 +167,8 @@ mihomo-rs config list-backups
 # 实时监控（每5秒刷新，持续60秒）
 mihomo-rs monitor --interval 5 --duration 60
 
-# 性能统计监控
-mihomo-rs monitor --stats
-
-# 健康检查
-mihomo-rs monitor --health
-
 # 查看规则信息和统计
-mihomo-rs rules --stats
+mihomo-rs rules stats
 
 # 验证规则语法
 mihomo-rs rules validate
