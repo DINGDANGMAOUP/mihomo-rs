@@ -59,17 +59,6 @@ pub fn init_logger(config: Option<logger::LoggerConfig>) {
     logger::init_logger(config);
 }
 
-/// 使用默认配置初始化日志系统（向后兼容）
-///
-/// # Examples
-///
-/// ```
-/// mihomo_rs::init_default_logger();
-/// ```
-pub fn init_default_logger() {
-    logger::init_logger(None);
-}
-
 /// 创建一个新的 Mihomo 客户端实例
 ///
 /// # Arguments

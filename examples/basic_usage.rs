@@ -13,7 +13,7 @@ use tokio::time::timeout;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
-    mihomo_rs::init_default_logger();
+    mihomo_rs::init_logger(None);
 
     println!("=== Mihomo SDK 基本使用示例 ===");
 
