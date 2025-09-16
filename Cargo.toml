@@ -43,5 +43,5 @@ anyhow = "1.0"
 sysinfo = "0.29"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.22"
 wiremock = "0.5"
