@@ -4,8 +4,8 @@ on:
   pull_request:
     types: [ opened, synchronize ]
 
-permissions:
-  pull-requests: write
+permissions: write-all
+#  pull-requests: write
   
 jobs:
   dependabot:
