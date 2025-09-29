@@ -30,7 +30,7 @@ log = "0.4"
 env_logger = "0.10"
 crossterm = "0.27"
 url = "2.4"
-regex = "1.10"
+regex = "1.11"
 base64 = "0.21"
 flate2 = "1.0"
 clap = { version = "4.5", features = ["derive"] }
