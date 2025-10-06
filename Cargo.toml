@@ -32,7 +32,7 @@ crossterm = "0.27"
 url = "2.4"
 regex = "1.11"
 base64 = "0.21"
-flate2 = "1.0"
+flate2 = "1.1"
 clap = { version = "4.5", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
