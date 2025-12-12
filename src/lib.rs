@@ -39,6 +39,8 @@ pub async fn stop_service(config_path: &Path) -> Result<()> {
 }
 
 pub async fn switch_proxy(group: &str, proxy: &str) -> Result<()> {
-    let client = MihomoClient::new("http://127.0.0.1:9090", None)?;
+    let cm = ConfigManager::new()?;
+    let url = cm.get_external_controller().await?;
+    let client = MihomoClient::new(&url, None)?;
     client.switch_proxy(group, proxy).await
 }
