@@ -154,6 +154,11 @@ async fn run() -> anyhow::Result<()> {
         Commands::Start => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+
+            // Ensure external-controller is configured before starting
+            let controller_url = cm.ensure_external_controller().await?;
+            log::info!("External controller configured at: {}", controller_url);
+
             let binary = vm.get_binary_path(None).await?;
             let config = cm.get_current_path().await?;
             let sm = ServiceManager::new(binary, config);
@@ -174,6 +179,11 @@ async fn run() -> anyhow::Result<()> {
         Commands::Restart => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+
+            // Ensure external-controller is configured before restarting
+            let controller_url = cm.ensure_external_controller().await?;
+            log::info!("External controller configured at: {}", controller_url);
+
             let binary = vm.get_binary_path(None).await?;
             let config = cm.get_current_path().await?;
             let sm = ServiceManager::new(binary, config);

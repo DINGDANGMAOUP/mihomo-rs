@@ -1,5 +1,5 @@
 use super::profile::Profile;
-use crate::core::{get_home_dir, MihomoError, Result};
+use crate::core::{find_available_port, get_home_dir, is_port_available, parse_port_from_addr, MihomoError, Result};
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -176,5 +176,66 @@ impl ConfigManager {
 
         log::debug!("External controller URL: {}", url);
         Ok(url)
+    }
+
+    /// Ensure external-controller is configured in the current profile
+    /// If not present or port is occupied, add/update it with an available port
+    pub async fn ensure_external_controller(&self) -> Result<String> {
+        let profile = self.get_current().await?;
+        let content = self.load(&profile).await?;
+        let mut config: serde_yaml::Value = serde_yaml::from_str(&content)?;
+
+        let needs_update = match config.get("external-controller").and_then(|v| v.as_str()) {
+            Some(controller) => {
+                // Parse the port from the controller address
+                let addr = if controller.starts_with(':') {
+                    format!("127.0.0.1{}", controller)
+                } else {
+                    controller.to_string()
+                };
+
+                match parse_port_from_addr(&addr) {
+                    Some(port) => {
+                        if !is_port_available(port) {
+                            log::warn!("Port {} is occupied, finding alternative", port);
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    None => {
+                        log::warn!("Invalid external-controller format: {}", controller);
+                        true
+                    }
+                }
+            }
+            None => {
+                log::info!("external-controller not found in config, adding default");
+                true
+            }
+        };
+
+        if needs_update {
+            let port = find_available_port(9090).ok_or_else(|| {
+                MihomoError::Config("No available ports found in range 9090-9190".to_string())
+            })?;
+
+            let controller_addr = format!("127.0.0.1:{}", port);
+            log::info!("Setting external-controller to {}", controller_addr);
+
+            if let serde_yaml::Value::Mapping(ref mut map) = config {
+                map.insert(
+                    serde_yaml::Value::String("external-controller".to_string()),
+                    serde_yaml::Value::String(controller_addr.clone()),
+                );
+            }
+
+            let updated_content = serde_yaml::to_string(&config)?;
+            self.save(&profile, &updated_content).await?;
+
+            Ok(format!("http://{}", controller_addr))
+        } else {
+            self.get_external_controller().await
+        }
     }
 }
