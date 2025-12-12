@@ -1,6 +1,6 @@
 [package]
 name = "mihomo-rs"
-version = "0.1.2"
+version = "1.0.1"
 edition = "2021"
 authors = ["dingdangmaoup"]
 description = "A Rust SDK and CLI tool for mihomo proxy management with service lifecycle management, configuration handling, and real-time monitoring"
@@ -9,39 +9,34 @@ repository = "https://github.com/DINGDANGMAOUP/mihomo-rs"
 homepage = "https://github.com/DINGDANGMAOUP/mihomo-rs"
 documentation = "https://docs.rs/mihomo-rs"
 readme = "README.md"
-keywords = ["proxy", "mihomo", "clash", "network", "cli"]
-categories = ["network-programming", "api-bindings", "command-line-utilities"]
 
-[lib]
-name = "mihomo_rs"
-path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+thiserror = "2.0"
+anyhow = "1.0"
+tokio-util = { version = "0.7", features = ["io"] }
+sysinfo = "0.30"
+url = "2.5"
+crossterm = "0.27"
+log = "0.4"
+env_logger = "0.11"
+dirs = "6.0"
+toml = "0.9"
+flate2 = "1.0"
+
+[dev-dependencies]
+tempfile = "3.22"
 
 [[bin]]
 name = "mihomo-rs"
 path = "src/main.rs"
 
-[dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-reqwest = { version = "0.12", features = ["json", "stream"] }
-thiserror = "2.0"
-log = "0.4"
-env_logger = "0.10"
-crossterm = "0.27"
-url = "2.4"
-regex = "1.12"
-base64 = "0.21"
-flate2 = "1.1"
-clap = { version = "4.5", features = ["derive"] }
-tokio = { version = "1.48", features = ["full"] }
-tokio-util = { version = "0.7", features = ["io"] }
-futures-util = "0.3"
-rand = "0.8"
-chrono = { version = "0.4", features = ["serde"] }
-anyhow = "1.0"
-sysinfo = "0.37"
-
-[dev-dependencies]
-tempfile = "3.23"
-wiremock = "0.5"
+[lib]
+name = "mihomo_rs"
+path = "src/lib.rs"
