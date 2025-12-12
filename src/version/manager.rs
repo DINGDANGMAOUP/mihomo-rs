@@ -54,7 +54,12 @@ impl VersionManager {
         let binary_path = version_dir.join(binary_name);
 
         let downloader = Downloader::new();
-        downloader.download_version(version, &binary_path).await?;
+        let result = downloader.download_version(version, &binary_path).await;
+
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&version_dir).await;
+            return result;
+        }
 
         Ok(())
     }
