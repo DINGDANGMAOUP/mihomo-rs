@@ -2,20 +2,12 @@ use std::net::{TcpListener, ToSocketAddrs};
 
 /// Check if a port is available on localhost
 pub fn is_port_available(port: u16) -> bool {
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
 /// Find an available port starting from the given port
 pub fn find_available_port(start_port: u16) -> Option<u16> {
-    for port in start_port..start_port + 100 {
-        if is_port_available(port) {
-            return Some(port);
-        }
-    }
-    None
+    (start_port..start_port + 100).find(|&port| is_port_available(port))
 }
 
 /// Parse port from address string (e.g., "127.0.0.1:9090" -> 9090)
