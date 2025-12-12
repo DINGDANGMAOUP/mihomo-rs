@@ -9,7 +9,7 @@ async fn main() -> mihomo_rs::Result<()> {
     let cm = ConfigManager::with_home(home)?;
 
     println!("Testing ensure_external_controller...\n");
-    
+
     // First call - should add external-controller
     println!("1. Calling ensure_external_controller (config has no external-controller)...");
     let url = cm.ensure_external_controller().await?;

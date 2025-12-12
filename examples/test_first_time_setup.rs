@@ -7,15 +7,18 @@ async fn main() -> mihomo_rs::Result<()> {
 
     // Use a fresh directory to simulate first-time setup
     let home = PathBuf::from("/tmp/mihomo-first-time");
-    
+
     // Clean up if exists
     if home.exists() {
         std::fs::remove_dir_all(&home).ok();
     }
 
     println!("Testing first-time setup scenario...\n");
-    println!("1. Creating ConfigManager with empty directory: {}", home.display());
-    
+    println!(
+        "1. Creating ConfigManager with empty directory: {}",
+        home.display()
+    );
+
     let cm = ConfigManager::with_home(home.clone())?;
 
     println!("2. Calling ensure_default_config() (no config exists yet)...");
@@ -25,7 +28,7 @@ async fn main() -> mihomo_rs::Result<()> {
     // Verify the config was created
     let profile = cm.get_current().await?;
     println!("3. Current profile: {}", profile);
-    
+
     let config_path = cm.get_current_path().await?;
     println!("   Config path: {}\n", config_path.display());
 

@@ -1,5 +1,7 @@
 use super::profile::Profile;
-use crate::core::{find_available_port, get_home_dir, is_port_available, parse_port_from_addr, MihomoError, Result};
+use crate::core::{
+    find_available_port, get_home_dir, is_port_available, parse_port_from_addr, MihomoError, Result,
+};
 use std::path::PathBuf;
 use tokio::fs;
 
