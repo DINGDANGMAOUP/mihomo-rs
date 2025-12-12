@@ -1,5 +1,5 @@
 use super::process;
-use crate::core::{MihomoError, Result};
+use crate::core::{get_home_dir, MihomoError, Result};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,9 +16,27 @@ pub struct ServiceManager {
 
 impl ServiceManager {
     pub fn new(binary_path: PathBuf, config_path: PathBuf) -> Self {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let pid_file = home.join(".config/mihomo-rs/mihomo.pid");
+        let home = get_home_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let pid_file = home.join("mihomo.pid");
 
+        Self {
+            binary_path,
+            config_path,
+            pid_file,
+        }
+    }
+
+    pub fn with_home(binary_path: PathBuf, config_path: PathBuf, home: PathBuf) -> Self {
+        let pid_file = home.join("mihomo.pid");
+
+        Self {
+            binary_path,
+            config_path,
+            pid_file,
+        }
+    }
+
+    pub fn with_pid_file(binary_path: PathBuf, config_path: PathBuf, pid_file: PathBuf) -> Self {
         Self {
             binary_path,
             config_path,

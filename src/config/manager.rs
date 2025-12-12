@@ -1,5 +1,5 @@
 use super::profile::Profile;
-use crate::core::{MihomoError, Result};
+use crate::core::{get_home_dir, MihomoError, Result};
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -10,10 +10,13 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     pub fn new() -> Result<Self> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| MihomoError::Config("Could not determine home directory".to_string()))?;
-        let config_dir = home.join(".config/mihomo-rs/configs");
-        let settings_file = home.join(".config/mihomo-rs/config.toml");
+        let home = get_home_dir()?;
+        Self::with_home(home)
+    }
+
+    pub fn with_home(home: PathBuf) -> Result<Self> {
+        let config_dir = home.join("configs");
+        let settings_file = home.join("config.toml");
 
         Ok(Self {
             config_dir,

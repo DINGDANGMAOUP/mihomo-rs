@@ -1,6 +1,6 @@
 use super::channel::{fetch_latest, Channel};
 use super::download::Downloader;
-use crate::core::{MihomoError, Result};
+use crate::core::{get_home_dir, MihomoError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
@@ -19,11 +19,13 @@ pub struct VersionManager {
 
 impl VersionManager {
     pub fn new() -> Result<Self> {
-        let home = dirs::home_dir().ok_or_else(|| {
-            MihomoError::Config("Could not determine home directory".to_string())
-        })?;
-        let install_dir = home.join(".config/mihomo-rs/versions");
-        let config_file = home.join(".config/mihomo-rs/config.toml");
+        let home = get_home_dir()?;
+        Self::with_home(home)
+    }
+
+    pub fn with_home(home: PathBuf) -> Result<Self> {
+        let install_dir = home.join("versions");
+        let config_file = home.join("config.toml");
 
         Ok(Self {
             install_dir,
