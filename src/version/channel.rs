@@ -1,5 +1,6 @@
 use crate::core::Result;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Channel {
@@ -16,13 +17,17 @@ impl Channel {
             Channel::Nightly => "nightly",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for Channel {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "stable" => Some(Channel::Stable),
-            "beta" => Some(Channel::Beta),
-            "nightly" | "alpha" => Some(Channel::Nightly),
-            _ => None,
+            "stable" => Ok(Channel::Stable),
+            "beta" => Ok(Channel::Beta),
+            "nightly" | "alpha" => Ok(Channel::Nightly),
+            _ => Err(format!("Invalid channel: {}", s)),
         }
     }
 }
@@ -37,7 +42,9 @@ pub struct ChannelInfo {
 pub async fn fetch_latest(channel: Channel) -> Result<ChannelInfo> {
     let url = match channel {
         Channel::Stable => "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest",
-        Channel::Beta => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1&prerelease=true",
+        Channel::Beta => {
+            "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1&prerelease=true"
+        }
         Channel::Nightly => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1",
     };
 

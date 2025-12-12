@@ -63,7 +63,12 @@ impl MihomoClient {
 
     pub async fn switch_proxy(&self, group: &str, proxy: &str) -> Result<()> {
         let url = self.build_url(&format!("/proxies/{}", group))?;
-        log::debug!("Switching group '{}' to proxy '{}' at {}", group, proxy, url);
+        log::debug!(
+            "Switching group '{}' to proxy '{}' at {}",
+            group,
+            proxy,
+            url
+        );
         let req = self.client.put(url).json(&json!({ "name": proxy }));
         let req = self.add_auth(req);
         req.send().await?;
@@ -87,7 +92,9 @@ impl MihomoClient {
         let url = self.build_url("/configs")?;
         let mut req = self.client.put(url);
         if let Some(path) = path {
-            req = req.query(&[("force", "true")]).json(&json!({ "path": path }));
+            req = req
+                .query(&[("force", "true")])
+                .json(&json!({ "path": path }));
         } else {
             req = req.query(&[("force", "true")]);
         }

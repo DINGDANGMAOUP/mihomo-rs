@@ -1,5 +1,7 @@
 /// Comprehensive test of all features with custom home directory
-use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, Result};
+use mihomo_rs::{
+    ConfigManager, MihomoClient, ProxyManager, Result, ServiceManager, VersionManager,
+};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -73,24 +75,22 @@ async fn main() -> Result<()> {
 
     // Try to connect (will fail if service not running)
     match cm.get_external_controller().await {
-        Ok(url) => {
-            match MihomoClient::new(&url, None) {
-                Ok(client) => {
-                    let pm = ProxyManager::new(client);
+        Ok(url) => match MihomoClient::new(&url, None) {
+            Ok(client) => {
+                let pm = ProxyManager::new(client);
 
-                    match pm.list_proxies().await {
-                        Ok(proxies) => println!("   ✓ List proxies: {} found", proxies.len()),
-                        Err(e) => println!("   ✗ List proxies failed: {}", e),
-                    }
-
-                    match pm.list_groups().await {
-                        Ok(groups) => println!("   ✓ List groups: {} found", groups.len()),
-                        Err(e) => println!("   ✗ List groups failed: {}", e),
-                    }
+                match pm.list_proxies().await {
+                    Ok(proxies) => println!("   ✓ List proxies: {} found", proxies.len()),
+                    Err(e) => println!("   ✗ List proxies failed: {}", e),
                 }
-                Err(e) => println!("   ✗ Client creation failed: {}", e),
+
+                match pm.list_groups().await {
+                    Ok(groups) => println!("   ✓ List groups: {} found", groups.len()),
+                    Err(e) => println!("   ✗ List groups failed: {}", e),
+                }
             }
-        }
+            Err(e) => println!("   ✗ Client creation failed: {}", e),
+        },
         Err(_) => println!("   ⚠ Skipping proxy tests (no config file)"),
     }
 
@@ -120,9 +120,18 @@ async fn main() -> Result<()> {
     println!("\n=== Conclusion ===");
     println!("All features work correctly with custom home directory!");
     println!("\nTo test with actual mihomo service:");
-    println!("1. Install mihomo: MIHOMO_HOME={} mihomo-rs install", test_home.display());
-    println!("2. Add config: cp your-config.yaml {}/configs/default.yaml", test_home.display());
-    println!("3. Start service: MIHOMO_HOME={} mihomo-rs start", test_home.display());
+    println!(
+        "1. Install mihomo: MIHOMO_HOME={} mihomo-rs install",
+        test_home.display()
+    );
+    println!(
+        "2. Add config: cp your-config.yaml {}/configs/default.yaml",
+        test_home.display()
+    );
+    println!(
+        "3. Start service: MIHOMO_HOME={} mihomo-rs start",
+        test_home.display()
+    );
     println!("4. Run this test again to verify proxy management");
 
     Ok(())

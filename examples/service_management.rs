@@ -1,4 +1,4 @@
-use mihomo_rs::{ConfigManager, ServiceManager, ServiceStatus, VersionManager, Result};
+use mihomo_rs::{ConfigManager, Result, ServiceManager, ServiceStatus, VersionManager};
 use std::time::Duration;
 
 #[tokio::main]

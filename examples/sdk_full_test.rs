@@ -1,7 +1,7 @@
 /// Complete SDK test with custom home directory - all features
 use mihomo_rs::{
-    ConfigManager, MihomoClient, ProxyManager, ServiceManager, ServiceStatus, VersionManager,
-    Result,
+    ConfigManager, MihomoClient, ProxyManager, Result, ServiceManager, ServiceStatus,
+    VersionManager,
 };
 use std::path::PathBuf;
 
@@ -36,7 +36,10 @@ async fn main() -> Result<()> {
         }
         Err(_) => {
             println!("   ⚠ No version installed");
-            println!("   Tip: Run 'MIHOMO_HOME={} mihomo-rs install' first", custom_home.display());
+            println!(
+                "   Tip: Run 'MIHOMO_HOME={} mihomo-rs install' first",
+                custom_home.display()
+            );
         }
     }
 
@@ -138,7 +141,10 @@ async fn main() -> Result<()> {
             println!("   ✓ ServiceManager created");
             println!("     Binary: {}", binary.display());
             println!("     Config: {}", config.display());
-            println!("     PID file: {}", custom_home.join("mihomo.pid").display());
+            println!(
+                "     PID file: {}",
+                custom_home.join("mihomo.pid").display()
+            );
 
             // Check status
             match sm.status().await {
@@ -173,8 +179,16 @@ async fn main() -> Result<()> {
     let versions1 = vm1.list_installed().await?;
     let versions2 = vm2.list_installed().await?;
 
-    println!("   ✓ Instance 1: {} (versions: {})", home1.display(), versions1.len());
-    println!("   ✓ Instance 2: {} (versions: {})", home2.display(), versions2.len());
+    println!(
+        "   ✓ Instance 1: {} (versions: {})",
+        home1.display(),
+        versions1.len()
+    );
+    println!(
+        "   ✓ Instance 2: {} (versions: {})",
+        home2.display(),
+        versions2.len()
+    );
     println!("   ✓ Instances are isolated");
 
     // ========================================
@@ -194,7 +208,10 @@ async fn main() -> Result<()> {
     println!("   MIHOMO_HOME={} mihomo-rs install", custom_home.display());
     println!("2. Add config:");
     println!("   mkdir -p {}/configs", custom_home.display());
-    println!("   cp your-config.yaml {}/configs/default.yaml", custom_home.display());
+    println!(
+        "   cp your-config.yaml {}/configs/default.yaml",
+        custom_home.display()
+    );
     println!("3. Start service:");
     println!("   MIHOMO_HOME={} mihomo-rs start", custom_home.display());
     println!("4. Run this test again");

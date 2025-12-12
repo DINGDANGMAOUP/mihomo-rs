@@ -1,4 +1,4 @@
-use mihomo_rs::{Channel, VersionManager, Result};
+use mihomo_rs::{Result, VersionManager};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -12,7 +12,12 @@ async fn main() -> Result<()> {
     } else {
         for version in &versions {
             let marker = if version.is_default { "*" } else { " " };
-            println!("{} {} ({})", marker, version.version, version.path.display());
+            println!(
+                "{} {} ({})",
+                marker,
+                version.version,
+                version.path.display()
+            );
         }
     }
 
@@ -20,7 +25,11 @@ async fn main() -> Result<()> {
     println!("\n=== Available Remote Versions (latest 10) ===");
     let releases = mihomo_rs::version::fetch_releases(10).await?;
     for release in releases {
-        let prerelease = if release.prerelease { " (prerelease)" } else { "" };
+        let prerelease = if release.prerelease {
+            " (prerelease)"
+        } else {
+            ""
+        };
         println!("{} - {}{}", release.version, release.name, prerelease);
     }
 

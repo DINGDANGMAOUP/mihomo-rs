@@ -58,9 +58,7 @@ impl ServiceManager {
 
         if !process::is_process_alive(pid) {
             process::remove_pid_file(&self.pid_file).await?;
-            return Err(MihomoError::Service(
-                "Service failed to start".to_string(),
-            ));
+            return Err(MihomoError::Service("Service failed to start".to_string()));
         }
 
         Ok(())

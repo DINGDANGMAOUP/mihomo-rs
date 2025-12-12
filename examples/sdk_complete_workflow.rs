@@ -1,5 +1,5 @@
 /// Complete workflow example using SDK with custom home
-use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, VersionManager, Result};
+use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, Result, VersionManager};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -25,7 +25,10 @@ async fn main() -> Result<()> {
     if profiles.is_empty() {
         println!("  ⚠ No profiles found. Please add a config file:");
         println!("    mkdir -p {}/configs", home.display());
-        println!("    cp your-config.yaml {}/configs/default.yaml", home.display());
+        println!(
+            "    cp your-config.yaml {}/configs/default.yaml",
+            home.display()
+        );
         return Ok(());
     }
 

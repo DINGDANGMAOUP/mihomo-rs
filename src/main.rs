@@ -29,7 +29,7 @@ async fn run() -> anyhow::Result<()> {
         Commands::Install { version } => {
             let vm = VersionManager::new()?;
             let version = if let Some(v) = version {
-                if let Some(channel) = Channel::from_str(&v) {
+                if let Ok(channel) = v.parse::<Channel>() {
                     print_info(&format!("Installing {} channel...", channel.as_str()));
                     vm.install_channel(channel).await?
                 } else {
@@ -136,7 +136,9 @@ async fn run() -> anyhow::Result<()> {
                     let profile = if let Some(p) = profile {
                         p
                     } else {
-                        cm.get_current().await.unwrap_or_else(|_| "default".to_string())
+                        cm.get_current()
+                            .await
+                            .unwrap_or_else(|_| "default".to_string())
                     };
                     let content = cm.load(&profile).await?;
                     println!("{}", content);
@@ -214,7 +216,9 @@ async fn run() -> anyhow::Result<()> {
                                 vec![
                                     p.name.clone(),
                                     p.proxy_type.clone(),
-                                    p.delay.map(|d| format!("{}ms", d)).unwrap_or_else(|| "-".to_string()),
+                                    p.delay
+                                        .map(|d| format!("{}ms", d))
+                                        .unwrap_or_else(|| "-".to_string()),
                                 ]
                             })
                             .collect();
@@ -247,13 +251,18 @@ async fn run() -> anyhow::Result<()> {
                     print_success(&format!("Switched {} to {}", group, proxy));
                 }
 
-                ProxyAction::Test { proxy, url, timeout } => {
+                ProxyAction::Test {
+                    proxy,
+                    url,
+                    timeout,
+                } => {
                     if let Some(proxy) = proxy {
                         let delay = client.test_delay(&proxy, &url, timeout).await?;
                         print_success(&format!("{}: {}ms", proxy, delay));
                     } else {
                         print_info("Testing all proxies...");
-                        let results = mihomo_rs::proxy::test_all_delays(&client, &url, timeout).await?;
+                        let results =
+                            mihomo_rs::proxy::test_all_delays(&client, &url, timeout).await?;
                         let mut rows: Vec<Vec<String>> = results
                             .iter()
                             .map(|(name, delay)| vec![name.clone(), format!("{}ms", delay)])
