@@ -155,6 +155,9 @@ async fn run() -> anyhow::Result<()> {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
 
+            // Ensure default config exists
+            cm.ensure_default_config().await?;
+
             // Ensure external-controller is configured before starting
             let controller_url = cm.ensure_external_controller().await?;
             log::info!("External controller configured at: {}", controller_url);
@@ -179,6 +182,9 @@ async fn run() -> anyhow::Result<()> {
         Commands::Restart => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+
+            // Ensure default config exists
+            cm.ensure_default_config().await?;
 
             // Ensure external-controller is configured before restarting
             let controller_url = cm.ensure_external_controller().await?;

@@ -154,6 +154,37 @@ impl ConfigManager {
         Ok(self.config_dir.join(format!("{}.yaml", profile)))
     }
 
+    /// Ensure a default config file exists, create one if it doesn't
+    pub async fn ensure_default_config(&self) -> Result<()> {
+        let profile = self.get_current().await?;
+        let path = self.config_dir.join(format!("{}.yaml", profile));
+
+        if !path.exists() {
+            log::info!("Default config '{}' not found, creating...", profile);
+
+            let port = find_available_port(9090).ok_or_else(|| {
+                MihomoError::Config("No available ports found in range 9090-9190".to_string())
+            })?;
+
+            let default_config = format!(
+                r#"# mihomo configuration
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:{}
+"#,
+                port
+            );
+
+            self.save(&profile, &default_config).await?;
+            log::info!("Created default config at: {}", path.display());
+        }
+
+        Ok(())
+    }
+
     pub async fn get_external_controller(&self) -> Result<String> {
         let profile = self.get_current().await?;
         log::debug!("Reading external-controller from profile: {}", profile);
