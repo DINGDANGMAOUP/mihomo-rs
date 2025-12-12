@@ -4,6 +4,9 @@ use clap::{Parser, Subcommand};
 #[command(name = "mihomo-rs")]
 #[command(about = "A Rust SDK and CLI tool for mihomo proxy management", long_about = None)]
 pub struct Cli {
+    #[arg(short, long, global = true, help = "Enable verbose logging")]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }

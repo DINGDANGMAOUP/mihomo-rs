@@ -44,10 +44,12 @@ impl MihomoClient {
 
     pub async fn get_proxies(&self) -> Result<HashMap<String, ProxyInfo>> {
         let url = self.build_url("/proxies")?;
+        log::debug!("Fetching proxies from: {}", url);
         let req = self.client.get(url);
         let req = self.add_auth(req);
         let resp = req.send().await?;
         let data: ProxiesResponse = resp.json().await?;
+        log::debug!("Received {} proxies", data.proxies.len());
         Ok(data.proxies)
     }
 
@@ -61,9 +63,11 @@ impl MihomoClient {
 
     pub async fn switch_proxy(&self, group: &str, proxy: &str) -> Result<()> {
         let url = self.build_url(&format!("/proxies/{}", group))?;
+        log::debug!("Switching group '{}' to proxy '{}' at {}", group, proxy, url);
         let req = self.client.put(url).json(&json!({ "name": proxy }));
         let req = self.add_auth(req);
         req.send().await?;
+        log::debug!("Successfully switched group '{}' to '{}'", group, proxy);
         Ok(())
     }
 

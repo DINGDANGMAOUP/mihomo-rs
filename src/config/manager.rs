@@ -150,7 +150,10 @@ impl ConfigManager {
     }
 
     pub async fn get_external_controller(&self) -> Result<String> {
-        let content = self.load(&self.get_current().await?).await?;
+        let profile = self.get_current().await?;
+        log::debug!("Reading external-controller from profile: {}", profile);
+
+        let content = self.load(&profile).await?;
         let config: serde_yaml::Value = serde_yaml::from_str(&content)?;
 
         let controller = config
@@ -166,6 +169,7 @@ impl ConfigManager {
             format!("http://{}", controller)
         };
 
+        log::debug!("External controller URL: {}", url);
         Ok(url)
     }
 }

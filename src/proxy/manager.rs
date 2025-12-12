@@ -32,6 +32,7 @@ impl ProxyManager {
             }
         }
 
+        log::debug!("Filtered {} proxy nodes from all proxies", nodes.len());
         nodes.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(nodes)
     }
