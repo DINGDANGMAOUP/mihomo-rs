@@ -29,7 +29,7 @@ async fn run() -> anyhow::Result<()> {
         Commands::Install { version } => {
             let vm = VersionManager::new()?;
             let version = if let Some(v) = version {
-                if let Some(channel) = Channel::from_str(&v) {
+                if let Ok(channel) = v.parse::<Channel>() {
                     print_info(&format!("Installing {} channel...", channel.as_str()));
                     vm.install_channel(channel).await?
                 } else {

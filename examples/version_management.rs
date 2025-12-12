@@ -1,4 +1,4 @@
-use mihomo_rs::{Channel, Result, VersionManager};
+use mihomo_rs::{Result, VersionManager};
 
 #[tokio::main]
 async fn main() -> Result<()> {
