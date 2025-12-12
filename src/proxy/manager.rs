@@ -15,7 +15,13 @@ impl ProxyManager {
         let mut nodes = vec![];
 
         for (name, info) in proxies {
-            if info.proxy_type != "Selector" && info.proxy_type != "URLTest" {
+            let is_group = matches!(
+                info.proxy_type.as_str(),
+                "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
+                | "Direct" | "Reject" | "Pass" | "Compatible" | "RejectDrop"
+            );
+
+            if !is_group {
                 let delay = info.history.first().map(|h| h.delay);
                 nodes.push(ProxyNode {
                     name,
@@ -35,7 +41,12 @@ impl ProxyManager {
         let mut groups = vec![];
 
         for (name, info) in proxies {
-            if info.proxy_type == "Selector" || info.proxy_type == "URLTest" {
+            let is_group = matches!(
+                info.proxy_type.as_str(),
+                "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
+            );
+
+            if is_group {
                 groups.push(ProxyGroup {
                     name,
                     group_type: info.proxy_type,

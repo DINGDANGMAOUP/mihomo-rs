@@ -189,8 +189,10 @@ async fn run() -> anyhow::Result<()> {
 
         Commands::Proxy { action } => {
             use mihomo_rs::cli::ProxyAction;
-            let client = MihomoClient::new("http://127.0.0.1:9090", None)?;
-            let pm = ProxyManager::new(client);
+            let cm = ConfigManager::new()?;
+            let url = cm.get_external_controller().await?;
+            let client = MihomoClient::new(&url, None)?;
+            let pm = ProxyManager::new(client.clone());
 
             match action {
                 ProxyAction::List => {
@@ -239,12 +241,10 @@ async fn run() -> anyhow::Result<()> {
 
                 ProxyAction::Test { proxy, url, timeout } => {
                     if let Some(proxy) = proxy {
-                        let client = MihomoClient::new("http://127.0.0.1:9090", None)?;
                         let delay = client.test_delay(&proxy, &url, timeout).await?;
                         print_success(&format!("{}: {}ms", proxy, delay));
                     } else {
                         print_info("Testing all proxies...");
-                        let client = MihomoClient::new("http://127.0.0.1:9090", None)?;
                         let results = mihomo_rs::proxy::test_all_delays(&client, &url, timeout).await?;
                         let mut rows: Vec<Vec<String>> = results
                             .iter()

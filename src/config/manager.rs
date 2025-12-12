@@ -148,4 +148,24 @@ impl ConfigManager {
         let profile = self.get_current().await?;
         Ok(self.config_dir.join(format!("{}.yaml", profile)))
     }
+
+    pub async fn get_external_controller(&self) -> Result<String> {
+        let content = self.load(&self.get_current().await?).await?;
+        let config: serde_yaml::Value = serde_yaml::from_str(&content)?;
+
+        let controller = config
+            .get("external-controller")
+            .and_then(|v| v.as_str())
+            .unwrap_or("127.0.0.1:9090");
+
+        let url = if controller.starts_with(':') {
+            format!("http://127.0.0.1{}", controller)
+        } else if controller.starts_with("http://") || controller.starts_with("https://") {
+            controller.to_string()
+        } else {
+            format!("http://{}", controller)
+        };
+
+        Ok(url)
+    }
 }

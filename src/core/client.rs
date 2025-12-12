@@ -5,6 +5,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use url::Url;
 
+#[derive(Clone)]
 pub struct MihomoClient {
     client: Client,
     base_url: Url,
