@@ -107,8 +107,7 @@ impl ConfigManager {
 
         let mut config = if self.settings_file.exists() {
             let content = fs::read_to_string(&self.settings_file).await?;
-            toml::from_str(&content)
-                .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+            toml::from_str(&content).unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
         } else {
             toml::Value::Table(toml::map::Map::new())
         };
@@ -119,7 +118,10 @@ impl ConfigManager {
                 .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
 
             if let toml::Value::Table(ref mut default) = default_table {
-                default.insert("profile".to_string(), toml::Value::String(profile.to_string()));
+                default.insert(
+                    "profile".to_string(),
+                    toml::Value::String(profile.to_string()),
+                );
             }
         }
 

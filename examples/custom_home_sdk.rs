@@ -1,5 +1,5 @@
 /// Example demonstrating custom home directory in SDK usage
-use mihomo_rs::{ConfigManager, VersionManager, Result};
+use mihomo_rs::{ConfigManager, Result, VersionManager};
 use std::path::PathBuf;
 
 #[tokio::main]

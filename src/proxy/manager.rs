@@ -17,8 +17,16 @@ impl ProxyManager {
         for (name, info) in proxies {
             let is_group = matches!(
                 info.proxy_type.as_str(),
-                "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
-                | "Direct" | "Reject" | "Pass" | "Compatible" | "RejectDrop"
+                "Selector"
+                    | "URLTest"
+                    | "Fallback"
+                    | "LoadBalance"
+                    | "Relay"
+                    | "Direct"
+                    | "Reject"
+                    | "Pass"
+                    | "Compatible"
+                    | "RejectDrop"
             );
 
             if !is_group {

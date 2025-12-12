@@ -1,7 +1,7 @@
 /// Complete workflow example demonstrating all major features
 use mihomo_rs::{
-    ConfigManager, MihomoClient, ProxyManager, ServiceManager, ServiceStatus, VersionManager,
-    Result,
+    ConfigManager, MihomoClient, ProxyManager, Result, ServiceManager, ServiceStatus,
+    VersionManager,
 };
 
 #[tokio::main]
@@ -85,7 +85,10 @@ async fn main() -> Result<()> {
                     for group in groups.iter().take(5) {
                         println!(
                             "     - {} ({}): {} -> {}",
-                            group.name, group.group_type, group.now, group.all.len()
+                            group.name,
+                            group.group_type,
+                            group.now,
+                            group.all.len()
                         );
                     }
                     if groups.len() > 5 {
@@ -105,7 +108,10 @@ async fn main() -> Result<()> {
 
     // 5. Summary
     println!("\n=== Summary ===");
-    println!("✓ Version management: {} versions installed", versions.len());
+    println!(
+        "✓ Version management: {} versions installed",
+        versions.len()
+    );
     println!("✓ Configuration: {} profiles available", profiles.len());
     println!("✓ Current profile: {}", current_profile);
     println!("✓ Controller URL: {}", controller_url);

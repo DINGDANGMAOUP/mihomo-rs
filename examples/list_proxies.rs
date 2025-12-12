@@ -19,10 +19,7 @@ async fn main() -> Result<()> {
             .delay
             .map(|d| format!("{}ms", d))
             .unwrap_or_else(|| "-".to_string());
-        println!(
-            "{:<30} {:<15} {}",
-            proxy.name, proxy.proxy_type, delay_str
-        );
+        println!("{:<30} {:<15} {}", proxy.name, proxy.proxy_type, delay_str);
     }
 
     // List all proxy groups

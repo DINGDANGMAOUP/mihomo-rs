@@ -19,8 +19,16 @@ async fn main() -> Result<()> {
         // Skip group types
         let is_group = matches!(
             info.proxy_type.as_str(),
-            "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
-                | "Direct" | "Reject" | "Pass" | "Compatible" | "RejectDrop"
+            "Selector"
+                | "URLTest"
+                | "Fallback"
+                | "LoadBalance"
+                | "Relay"
+                | "Direct"
+                | "Reject"
+                | "Pass"
+                | "Compatible"
+                | "RejectDrop"
         );
 
         if !is_group {

@@ -37,7 +37,9 @@ pub struct ChannelInfo {
 pub async fn fetch_latest(channel: Channel) -> Result<ChannelInfo> {
     let url = match channel {
         Channel::Stable => "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest",
-        Channel::Beta => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1&prerelease=true",
+        Channel::Beta => {
+            "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1&prerelease=true"
+        }
         Channel::Nightly => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1",
     };
 

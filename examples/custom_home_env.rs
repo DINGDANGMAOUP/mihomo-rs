@@ -1,5 +1,5 @@
 /// Example demonstrating custom home directory usage
-use mihomo_rs::{ConfigManager, VersionManager, Result};
+use mihomo_rs::{ConfigManager, Result, VersionManager};
 
 #[tokio::main]
 async fn main() -> Result<()> {

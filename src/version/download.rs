@@ -43,7 +43,8 @@ impl Downloader {
         use std::io::Read;
         let mut decoder = GzDecoder::new(&bytes[..]);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)
+        decoder
+            .read_to_end(&mut decompressed)
             .map_err(|e| MihomoError::Version(format!("Failed to decompress: {}", e)))?;
 
         let mut file = fs::File::create(dest).await?;
