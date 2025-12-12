@@ -1,95 +1,46 @@
-//! # Mihomo RS SDK
-//!
-//! 一个用于管理和控制 mihomo 代理服务的 Rust SDK。
-//! 提供配置管理、代理控制、规则引擎和监控功能。
-
-pub mod client;
+pub mod cli;
 pub mod config;
-pub mod error;
-pub mod logger;
-pub mod monitor;
+pub mod core;
 pub mod proxy;
-pub mod retry;
-pub mod rules;
 pub mod service;
-pub mod types;
-pub mod utils;
+pub mod version;
 
-// 重新导出主要的公共接口
-pub use client::MihomoClient;
-pub use config::{Config, ProxyConfig, RuleConfig};
-pub use error::{ErrorCategory, ErrorContext, ErrorInfo, MihomoError, Result};
-pub use retry::{retry_async, retry_sync, RetryExecutor, RetryPolicy};
-pub use service::{ServiceConfig, ServiceManager, ServiceStatus, VersionInfo};
-pub use types::{
-    ApiResponse, Connection, ConnectionMetadata, ConnectionsResponse, DelayHistory, DnsQuery,
-    EmptyResponse, GcStats, HealthCheckResult, LogEntry, LogLevel, Memory, MemoryUsage, Provider,
-    ProviderHealthResponse, ProxyGroup, ProxyGroupType, ProxyItem, ProxyNode, ProxyType, Rule,
-    RuleProvider, RuleStats, RuleType, RuntimeInfo, ServiceConfigInfo, ServiceConfigUpdate,
-    ServiceStats, SubscriptionInfo, SystemInfo, Traffic, Version,
-};
+pub use config::{ConfigManager, Profile};
+pub use core::{MihomoClient, MihomoError, Result};
+pub use proxy::ProxyManager;
+pub use service::{ServiceManager, ServiceStatus};
+pub use version::{Channel, VersionManager};
 
-/// SDK 版本信息
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+use std::path::Path;
 
-/// 初始化日志系统
-///
-/// # Arguments
-///
-/// * `config` - 日志配置，如果为None则使用默认配置
-///
-/// # Examples
-///
-/// ```
-/// use mihomo_rs::logger::LoggerConfig;
-///
-/// // 使用默认配置
-/// mihomo_rs::init_logger(None);
-///
-/// // 使用自定义配置
-/// let config = LoggerConfig {
-///     level: log::LevelFilter::Debug,
-///     show_timestamp: true,
-///     show_module: true,
-///     ..Default::default()
-/// };
-/// mihomo_rs::init_logger(Some(config));
-/// ```
-pub fn init_logger(config: Option<logger::LoggerConfig>) {
-    logger::init_logger(config);
+pub async fn install_mihomo(version: Option<&str>) -> Result<String> {
+    let vm = VersionManager::new()?;
+    if let Some(v) = version {
+        vm.install(v).await?;
+        Ok(v.to_string())
+    } else {
+        let version = vm.install_channel(Channel::Stable).await?;
+        Ok(version)
+    }
 }
 
-/// 创建一个新的 Mihomo 客户端实例
-///
-/// # Arguments
-///
-/// * `base_url` - mihomo 服务的基础 URL
-/// * `secret` - API 访问密钥（可选）
-///
-/// # Examples
-///
-/// ```
-/// use mihomo_rs::create_client;
-///
-/// let client = create_client("http://127.0.0.1:9090", Some("your-secret".to_string()));
-/// ```
-pub fn create_client(base_url: &str, secret: Option<String>) -> Result<MihomoClient> {
-    MihomoClient::new(base_url, secret)
+pub async fn start_service(config_path: &Path) -> Result<()> {
+    let vm = VersionManager::new()?;
+    let binary = vm.get_binary_path(None).await?;
+    let sm = ServiceManager::new(binary, config_path.to_path_buf());
+    sm.start().await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub async fn stop_service(config_path: &Path) -> Result<()> {
+    let vm = VersionManager::new()?;
+    let binary = vm.get_binary_path(None).await?;
+    let sm = ServiceManager::new(binary, config_path.to_path_buf());
+    sm.stop().await
+}
 
-    #[test]
-    #[allow(clippy::const_is_empty)]
-    fn test_version() {
-        assert!(!VERSION.is_empty(), "Version should not be empty");
-    }
-
-    #[test]
-    fn test_create_client() {
-        let client = create_client("http://127.0.0.1:9090", None);
-        assert!(client.is_ok());
-    }
+pub async fn switch_proxy(group: &str, proxy: &str) -> Result<()> {
+    let cm = ConfigManager::new()?;
+    let url = cm.get_external_controller().await?;
+    let client = MihomoClient::new(&url, None)?;
+    client.switch_proxy(group, proxy).await
 }
