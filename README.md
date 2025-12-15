@@ -1,388 +1,356 @@
 # mihomo-rs
 
-[![CI](https://github.com/DINGDANGMAOUP/mihomo-rs/workflows/CI/badge.svg)](https://github.com/DINGDANGMAOUP/mihomo-rs/actions/workflows/ci.yml)
-[![Release](https://github.com/DINGDANGMAOUP/mihomo-rs/workflows/Release/badge.svg)](https://github.com/DINGDANGMAOUP/mihomo-rs/actions/workflows/release.yml)
+<div align="center">
+
 [![Crates.io](https://img.shields.io/crates/v/mihomo-rs.svg)](https://crates.io/crates/mihomo-rs)
 [![Documentation](https://docs.rs/mihomo-rs/badge.svg)](https://docs.rs/mihomo-rs)
-[![License](https://img.shields.io/crates/l/mihomo-rs.svg)](https://github.com/DINGDANGMAOUP/mihomo-rs/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Rust SDK and CLI tool for mihomo proxy management, inspired by rustup's design philosophy.
+[Examples](./examples/) | [API Docs](https://docs.rs/mihomo-rs)
+
+English | [简体中文](README_CN.md)
+
+A Rust SDK and CLI tool for [mihomo](https://github.com/MetaCubeX/mihomo) proxy management with service lifecycle management, configuration handling, and real-time monitoring.
+
+</div>
+
+---
 
 ## Features
 
-- **Version Management**: Install, update, and switch between mihomo kernel versions (rustup-like)
-- **Configuration Management**: Manage multiple configuration profiles
-- **Service Management**: Start, stop, and restart mihomo service
-- **Proxy Management**: List, switch, and test proxy nodes
-- **High-level SDK**: Easy-to-use Rust library for integration
+- 🔧 **Version Management** - Install, update, and switch between mihomo versions (rustup-like experience)
+- ⚙️ **Configuration Management** - Manage multiple configuration profiles with validation
+- 🚀 **Service Lifecycle** - Start, stop, restart mihomo service with PID management
+- 🔄 **Proxy Operations** - List, switch, and test proxy nodes and groups
+- 📊 **Real-time Monitoring** - Stream logs, traffic statistics, and memory usage
+- 📦 **SDK Library** - Use as a library in your Rust applications
+- 🖥️ **CLI Tool** - Command-line interface for easy management
 
 ## Installation
 
-```bash
-cargo install --path .
-```
-
-## CLI Usage
-
-### Version Management
-
-```bash
-# Install latest stable version
-mihomo-rs install
-
-# Install specific version
-mihomo-rs install v1.18.0
-
-# Install from channel (stable/beta/nightly)
-mihomo-rs install stable
-
-# Update to latest stable
-mihomo-rs update
-
-# List installed versions
-mihomo-rs list
-
-# Set default version
-mihomo-rs default v1.18.0
-
-# Uninstall a version
-mihomo-rs uninstall v1.18.0
-```
-
-### Configuration Management
-
-```bash
-# List config profiles
-mihomo-rs config list
-
-# Switch to a profile
-mihomo-rs config use production
-
-# Show config content
-mihomo-rs config show
-
-# Delete a profile
-mihomo-rs config delete old-config
-```
-
-### Service Management
-
-```bash
-# Start mihomo service
-mihomo-rs start
-
-# Stop mihomo service
-mihomo-rs stop
-
-# Restart mihomo service
-mihomo-rs restart
-
-# Check service status
-mihomo-rs status
-```
-
-### Proxy Management
-
-```bash
-# List all proxies
-mihomo-rs proxy list
-
-# List proxy groups
-mihomo-rs proxy groups
-
-# Switch proxy in group
-mihomo-rs proxy switch "PROXY" "HongKong-01"
-
-# Test proxy delay
-mihomo-rs proxy test "HongKong-01"
-
-# Test all proxies
-mihomo-rs proxy test
-
-# Show current proxies
-mihomo-rs proxy current
-```
-
-### Log Management
-
-```bash
-# Stream mihomo logs in real-time
-mihomo-rs logs
-
-# Filter logs by level
-mihomo-rs logs --level info
-mihomo-rs logs --level warning
-mihomo-rs logs --level error
-mihomo-rs logs --level debug
-```
-
-### Traffic and Memory Monitoring
-
-```bash
-# Stream real-time traffic statistics
-mihomo-rs traffic
-
-# Show current memory usage
-mihomo-rs memory
-```
-
-## SDK Usage
+### As a Library
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mihomo-rs = "1.0"
-tokio = { version = "1.0", features = ["full"] }
+mihomo-rs = "1.0.1"
+tokio = { version = "1", features = ["full"] }
 ```
 
-### Examples
-
-The `examples/` directory contains comprehensive examples demonstrating all SDK features:
+### As a CLI Tool
 
 ```bash
-# Complete workflow - demonstrates all major features
-cargo run --example complete_workflow
-
-# Version management - install, list, and manage versions
-cargo run --example version_management
-
-# Configuration management - manage profiles and settings
-cargo run --example config_management
-
-# Service management - start, stop, and check status
-cargo run --example service_management
-
-# List all proxies and groups
-cargo run --example list_proxies
-
-# Detailed proxy group information
-cargo run --example proxy_groups
-
-# Switch proxy in a group
-cargo run --example switch_proxy
-
-# Test proxy delays
-cargo run --example test_delay
-
-# Stream logs in real-time
-cargo run --example stream_logs
-
-# Stream filtered logs (error level only)
-cargo run --example stream_logs_filtered
-
-# Advanced log processing example
-cargo run --example stream_logs_advanced
-
-# Stream traffic statistics
-cargo run --example stream_traffic
-
-# Get memory usage
-cargo run --example get_memory
-
-# Monitor both traffic and memory
-cargo run --example monitor_traffic_memory
+cargo install mihomo-rs
 ```
 
-### Quick Start
+## Quick Start
+
+### SDK Usage
 
 ```rust
-use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, Result};
+use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Get external controller URL from config
-    let config_manager = ConfigManager::new()?;
-    let url = config_manager.get_external_controller().await?;
+    // 1. Install mihomo
+    let vm = VersionManager::new()?;
+    vm.install_channel(Channel::Stable).await?;
 
-    // Create client and proxy manager
-    let client = MihomoClient::new(&url, None)?;
-    let proxy_manager = ProxyManager::new(client);
+    // 2. Setup configuration
+    let cm = ConfigManager::new()?;
+    cm.ensure_default_config().await?;
+    let controller_url = cm.ensure_external_controller().await?;
 
-    // List all proxy nodes
-    let proxies = proxy_manager.list_proxies().await?;
-    for proxy in proxies {
-        println!("{}: {:?}", proxy.name, proxy.delay);
+    // 3. Start service
+    let binary = vm.get_binary_path(None).await?;
+    let config = cm.get_current_path().await?;
+    let sm = ServiceManager::new(binary, config);
+    sm.start().await?;
+
+    // 4. Use proxy manager
+    let client = MihomoClient::new(&controller_url, None)?;
+    let pm = ProxyManager::new(client);
+
+    // List proxy groups
+    let groups = pm.list_groups().await?;
+    for group in groups {
+        println!("{}: {} ({})", group.name, group.now, group.group_type);
     }
 
     // Switch proxy
-    proxy_manager.switch("Auto", "🇭🇰 HK01 • vLess").await?;
+    pm.switch("GLOBAL", "proxy-name").await?;
 
     Ok(())
 }
 ```
 
-### Monitoring for Third-Party Applications
+### CLI Usage
 
-The SDK provides channel-based APIs for real-time monitoring, allowing third-party applications to process data flexibly:
+```bash
+# Install mihomo
+mihomo-rs version install --channel stable
 
-```rust
-use mihomo_rs::{ConfigManager, MihomoClient, Result};
+# Start service
+mihomo-rs service start
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let config_manager = ConfigManager::new()?;
-    let url = config_manager.get_external_controller().await?;
-    let client = MihomoClient::new(&url, None)?;
+# List proxies
+mihomo-rs proxy list
 
-    // Stream logs
-    let mut log_rx = client.stream_logs(None).await?;
-    tokio::spawn(async move {
-        while let Some(log) = log_rx.recv().await {
-            // Process logs: send to logging system, store in DB, etc.
-        }
-    });
+# Switch proxy
+mihomo-rs proxy switch GLOBAL proxy-name
 
-    // Stream traffic statistics
-    let mut traffic_rx = client.stream_traffic().await?;
-    tokio::spawn(async move {
-        while let Some(traffic) = traffic_rx.recv().await {
-            // Monitor bandwidth: traffic.up, traffic.down (bytes/s)
-            // Send to monitoring dashboard, trigger alerts, etc.
-        }
-    });
-
-    // Query memory periodically
-    let memory = client.get_memory().await?;
-    println!("Memory: {} MB / {} MB",
-        memory.in_use / 1024 / 1024,
-        memory.os_limit / 1024 / 1024
-    );
-
-    Ok(())
-}
+# Monitor traffic
+mihomo-rs monitor traffic
 ```
 
-### Advanced Usage
+## Examples
 
-```rust
-use mihomo_rs::{
-    VersionManager, ConfigManager, ServiceManager,
-    MihomoClient, ProxyManager, Channel, Result
-};
+The [examples/](./examples/) directory contains 28 comprehensive examples organized by category:
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Version management
-    let vm = VersionManager::new()?;
-    vm.install_channel(Channel::Stable).await?;
-    vm.set_default("v1.18.0").await?;
+### Quick Start
+- [hello_mihomo.rs](./examples/01_quickstart/hello_mihomo.rs) - Minimal example
+- [basic_workflow.rs](./examples/01_quickstart/basic_workflow.rs) - Complete beginner workflow
 
-    // Configuration management
-    let cm = ConfigManager::new()?;
-    cm.set_current("production").await?;
-    let config_path = cm.get_current_path().await?;
+### Version Management
+- [install_version.rs](./examples/02_version_management/install_version.rs) - Install specific version
+- [install_by_channel.rs](./examples/02_version_management/install_by_channel.rs) - Install from channel
+- [list_versions.rs](./examples/02_version_management/list_versions.rs) - List installed versions
+- [manage_versions.rs](./examples/02_version_management/manage_versions.rs) - Version lifecycle
 
-    // Service management
-    let binary = vm.get_binary_path(None).await?;
-    let sm = ServiceManager::new(binary, config_path);
-    sm.start().await?;
+### Configuration
+- [manage_profiles.rs](./examples/03_configuration/manage_profiles.rs) - Profile management
+- [custom_config.rs](./examples/03_configuration/custom_config.rs) - Custom configuration
+- [external_controller.rs](./examples/03_configuration/external_controller.rs) - Controller setup
 
-    // Proxy management with config-based URL
-    let url = cm.get_external_controller().await?;
-    let client = MihomoClient::new(&url, None)?;
-    let pm = ProxyManager::new(client);
+### Service Management
+- [service_lifecycle.rs](./examples/04_service/service_lifecycle.rs) - Start/stop/restart
+- [service_status.rs](./examples/04_service/service_status.rs) - Check status
+- [auto_restart.rs](./examples/04_service/auto_restart.rs) - Auto-restart logic
 
-    // List groups and their current proxies
-    let groups = pm.list_groups().await?;
-    for group in groups {
-        println!("{} -> {}", group.name, group.now);
-    }
+### Proxy Operations
+- [list_proxies.rs](./examples/05_proxy_operations/list_proxies.rs) - List all proxies
+- [list_groups.rs](./examples/05_proxy_operations/list_groups.rs) - List proxy groups
+- [switch_proxy.rs](./examples/05_proxy_operations/switch_proxy.rs) - Switch proxy
+- [test_delay.rs](./examples/05_proxy_operations/test_delay.rs) - Test latency
+- [current_proxy.rs](./examples/05_proxy_operations/current_proxy.rs) - Current selections
 
-    // Stream traffic statistics
-    let mut traffic_rx = client.stream_traffic().await?;
-    tokio::spawn(async move {
-        while let Some(traffic) = traffic_rx.recv().await {
-            println!("↑ {} KB/s  ↓ {} KB/s",
-                traffic.up / 1024, traffic.down / 1024);
-        }
-    });
+### Monitoring
+- [stream_logs.rs](./examples/06_monitoring/stream_logs.rs) - Real-time logs
+- [stream_logs_filtered.rs](./examples/06_monitoring/stream_logs_filtered.rs) - Filtered logs
+- [stream_traffic.rs](./examples/06_monitoring/stream_traffic.rs) - Traffic monitoring
+- [memory_usage.rs](./examples/06_monitoring/memory_usage.rs) - Memory usage
 
-    // Get memory usage
-    let memory = client.get_memory().await?;
-    println!("Memory: {} MB", memory.in_use / 1024 / 1024);
+### Advanced
+- [custom_home_dir.rs](./examples/07_advanced/custom_home_dir.rs) - Custom home directory
+- [complete_workflow.rs](./examples/07_advanced/complete_workflow.rs) - Full application
+- [error_handling.rs](./examples/07_advanced/error_handling.rs) - Error patterns
+- [concurrent_operations.rs](./examples/07_advanced/concurrent_operations.rs) - Parallel ops
 
-    Ok(())
-}
+### Integration
+- [first_time_setup.rs](./examples/08_integration/first_time_setup.rs) - First-time setup
+- [migration_helper.rs](./examples/08_integration/migration_helper.rs) - Migration guide
+
+Run any example with:
+```bash
+cargo run --example hello_mihomo
 ```
+
+See [examples/README.md](./examples/README.md) for detailed documentation.
 
 ## Architecture
 
 ```
 mihomo-rs/
 ├── src/
-│   ├── lib.rs              # SDK public API
-│   ├── main.rs             # CLI entry point
-│   ├── core/               # Core SDK modules
-│   │   ├── client.rs       # HTTP client for mihomo API
-│   │   ├── error.rs        # Error types
-│   │   └── types.rs        # Common types
-│   ├── version/            # Version management
-│   │   ├── manager.rs      # Install/switch versions
-│   │   ├── channel.rs      # Stable/beta/nightly
-│   │   └── download.rs     # Download kernels
-│   ├── config/             # Configuration management
-│   │   ├── manager.rs      # Config operations
-│   │   └── profile.rs      # Multiple profiles
-│   ├── service/            # Service lifecycle
-│   │   ├── manager.rs      # Start/stop/restart
-│   │   └── process.rs      # Process management
-│   ├── proxy/              # Proxy management
-│   │   ├── manager.rs      # Proxy operations
-│   │   └── test.rs         # Delay testing
-│   └── cli/                # CLI-specific
-│       ├── commands.rs     # Command definitions
-│       └── output.rs       # Output formatting
+│   ├── core/           # Core HTTP/WebSocket client and types
+│   │   ├── client.rs   # MihomoClient (HTTP + WebSocket)
+│   │   ├── types.rs    # Data structures
+│   │   ├── error.rs    # Error types
+│   │   ├── port.rs     # Port utilities
+│   │   └── home.rs     # Home directory management
+│   ├── version/        # Version management
+│   │   ├── manager.rs  # VersionManager
+│   │   ├── channel.rs  # Channel (Stable/Beta/Nightly)
+│   │   └── download.rs # Binary downloader
+│   ├── config/         # Configuration management
+│   │   ├── manager.rs  # ConfigManager
+│   │   └── profile.rs  # Profile struct
+│   ├── service/        # Service lifecycle
+│   │   ├── manager.rs  # ServiceManager
+│   │   └── process.rs  # Process utilities
+│   ├── proxy/          # Proxy operations
+│   │   ├── manager.rs  # ProxyManager
+│   │   └── test.rs     # Delay testing
+│   └── cli/            # CLI application
+├── examples/           # 28 comprehensive examples
+└── tests/              # Integration tests
+```
+
+## API Overview
+
+### Main Modules
+
+| Module | Description |
+|--------|-------------|
+| `MihomoClient` | HTTP/WebSocket client for mihomo API |
+| `VersionManager` | Install and manage mihomo versions |
+| `ConfigManager` | Manage configuration profiles |
+| `ServiceManager` | Control service lifecycle |
+| `ProxyManager` | High-level proxy operations |
+
+### Key Types
+
+| Type | Description |
+|------|-------------|
+| `Version` | Mihomo version information |
+| `ProxyNode` | Individual proxy node |
+| `ProxyGroup` | Proxy group (Selector, URLTest, etc.) |
+| `TrafficData` | Upload/download statistics |
+| `MemoryData` | Memory usage information |
+| `Channel` | Release channel (Stable/Beta/Nightly) |
+
+### Top-level Functions
+
+```rust
+// Convenience functions for common operations
+use mihomo_rs::{install_mihomo, start_service, stop_service, switch_proxy};
+
+// Install mihomo
+install_mihomo(None).await?; // Latest stable
+
+// Service management
+start_service(&config_path).await?;
+stop_service(&config_path).await?;
+
+// Proxy switching
+switch_proxy("GLOBAL", "proxy-name").await?;
 ```
 
 ## Configuration
 
-mihomo-rs stores its configuration in `~/.config/mihomo-rs/` by default:
+### Default Locations
 
-- `config.toml` - mihomo-rs settings (default version, profile)
-- `versions/` - Installed mihomo kernel versions
-- `configs/` - Configuration profiles
-- `mihomo.pid` - Service PID file
+mihomo-rs stores data in `~/.config/mihomo-rs/` (or `$MIHOMO_HOME`):
+
+```
+~/.config/mihomo-rs/
+├── versions/           # Installed mihomo binaries
+│   ├── v1.18.0/
+│   └── v1.18.9/
+├── configs/            # Configuration profiles
+│   ├── default.yaml
+│   └── custom.yaml
+├── config.toml         # mihomo-rs settings
+└── mihomo.pid          # Service PID file
+```
 
 ### Custom Home Directory
 
-You can customize the home directory in two ways:
-
-**1. Environment Variable (CLI usage):**
+Set via environment variable:
 
 ```bash
-# Use a custom directory
-export MIHOMO_HOME=/path/to/custom/dir
-mihomo-rs list
-
-# Or set it for a single command
-MIHOMO_HOME=/path/to/custom/dir mihomo-rs list
+export MIHOMO_HOME=/custom/path
 ```
 
-**2. Programmatically (SDK usage):**
+Or programmatically:
 
 ```rust
 use mihomo_rs::{VersionManager, ConfigManager};
 use std::path::PathBuf;
 
-let home = PathBuf::from("/opt/mihomo");
+let home = PathBuf::from("/custom/path");
 let vm = VersionManager::with_home(home.clone())?;
 let cm = ConfigManager::with_home(home)?;
-
-// All operations now use the custom directory
-vm.install("v1.18.0").await?;
 ```
 
-This is useful for:
-- Running multiple isolated instances
-- Using a different storage location
-- Testing without affecting your main configuration
-- Multi-tenant applications
+### Example Configuration
 
-## License
+```yaml
+# ~/.config/mihomo-rs/configs/default.yaml
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
 
-MIT
+proxies:
+  - name: "proxy1"
+    type: ss
+    server: server.example.com
+    port: 443
+    cipher: aes-256-gcm
+    password: password
+
+proxy-groups:
+  - name: "GLOBAL"
+    type: select
+    proxies:
+      - proxy1
+```
+
+## Development
+
+### Building from Source
+
+```bash
+git clone https://github.com/DINGDANGMAOUP/mihomo-rs
+cd mihomo-rs
+cargo build --release
+```
+
+### Running Tests
+
+```bash
+cargo test
+```
+
+### Running Examples
+
+```bash
+# Enable logging for debugging
+RUST_LOG=debug cargo run --example basic_workflow
+```
+
+## Use Cases
+
+### 1. System Administrators
+- Automate mihomo deployment and updates
+- Monitor multiple mihomo instances
+- Centralized configuration management
+
+### 2. Application Developers
+- Integrate proxy management into applications
+- Real-time traffic monitoring
+- Programmatic proxy switching
+
+### 3. Power Users
+- Manage multiple mihomo versions
+- Quick proxy testing and switching
+- Custom automation scripts
+
+### 4. CI/CD Pipelines
+- Automated testing with proxies
+- Isolated test environments
+- Version-specific testing
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+### Development Setup
+
+1. Install Rust (1.70+)
+2. Clone the repository
+3. Run tests: `cargo test`
+4. Run clippy: `cargo clippy`
+5. Format code: `cargo fmt`
+
+## License
+
+MIT License - see [LICENSE](./LICENSE) for details.
+
+## Related Projects
+
+- [mihomo](https://github.com/MetaCubeX/mihomo) - Mihomo
