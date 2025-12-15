@@ -193,3 +193,52 @@ impl MihomoClient {
         Ok(resp.json().await?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_new() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_client_new_with_secret() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", Some("secret".to_string()));
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_client_new_invalid_url() {
+        let client = MihomoClient::new("not a url", None);
+        assert!(client.is_err());
+    }
+
+    #[test]
+    fn test_build_url() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+        let url = client.build_url("/version");
+        assert!(url.is_ok());
+        assert_eq!(url.unwrap().as_str(), "http://127.0.0.1:9090/version");
+    }
+
+    #[test]
+    fn test_build_url_with_path() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+        let url = client.build_url("/proxies/GLOBAL");
+        assert!(url.is_ok());
+        assert_eq!(
+            url.unwrap().as_str(),
+            "http://127.0.0.1:9090/proxies/GLOBAL"
+        );
+    }
+
+    #[test]
+    fn test_client_clone() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+        let cloned = client.clone();
+        assert_eq!(client.base_url, cloned.base_url);
+    }
+}
