@@ -72,6 +72,12 @@ pub enum Commands {
         #[arg(short, long, help = "Log level filter (info/warning/error/debug/silent)")]
         level: Option<String>,
     },
+
+    #[command(about = "Stream traffic statistics")]
+    Traffic,
+
+    #[command(about = "Show memory usage")]
+    Memory,
 }
 
 #[derive(Subcommand)]

@@ -63,3 +63,17 @@ pub struct DelayTestRequest {
 pub struct DelayTestResponse {
     pub delay: u32,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficData {
+    pub up: u64,
+    pub down: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryData {
+    #[serde(rename = "inuse")]
+    pub in_use: u64,
+    #[serde(rename = "oslimit")]
+    pub os_limit: u64,
+}

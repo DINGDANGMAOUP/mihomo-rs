@@ -116,6 +116,16 @@ mihomo-rs logs --level error
 mihomo-rs logs --level debug
 ```
 
+### Traffic and Memory Monitoring
+
+```bash
+# Stream real-time traffic statistics
+mihomo-rs traffic
+
+# Show current memory usage
+mihomo-rs memory
+```
+
 ## SDK Usage
 
 Add to your `Cargo.toml`:
@@ -163,6 +173,15 @@ cargo run --example stream_logs_filtered
 
 # Advanced log processing example
 cargo run --example stream_logs_advanced
+
+# Stream traffic statistics
+cargo run --example stream_traffic
+
+# Get memory usage
+cargo run --example get_memory
+
+# Monitor both traffic and memory
+cargo run --example monitor_traffic_memory
 ```
 
 ### Quick Start
@@ -193,9 +212,9 @@ async fn main() -> Result<()> {
 }
 ```
 
-### Log Streaming for Third-Party Applications
+### Monitoring for Third-Party Applications
 
-The SDK provides a channel-based API for log streaming, allowing third-party applications to process logs flexibly:
+The SDK provides channel-based APIs for real-time monitoring, allowing third-party applications to process data flexibly:
 
 ```rust
 use mihomo_rs::{ConfigManager, MihomoClient, Result};
@@ -206,23 +225,29 @@ async fn main() -> Result<()> {
     let url = config_manager.get_external_controller().await?;
     let client = MihomoClient::new(&url, None)?;
 
-    // Get log receiver channel
+    // Stream logs
     let mut log_rx = client.stream_logs(None).await?;
-
-    // Process logs in your application
     tokio::spawn(async move {
         while let Some(log) = log_rx.recv().await {
-            // Custom processing:
-            // - Parse and filter
-            // - Send to logging system
-            // - Store in database
-            // - Trigger alerts
-            // - Send to monitoring service
-            if log.contains("error") {
-                // Handle errors
-            }
+            // Process logs: send to logging system, store in DB, etc.
         }
     });
+
+    // Stream traffic statistics
+    let mut traffic_rx = client.stream_traffic().await?;
+    tokio::spawn(async move {
+        while let Some(traffic) = traffic_rx.recv().await {
+            // Monitor bandwidth: traffic.up, traffic.down (bytes/s)
+            // Send to monitoring dashboard, trigger alerts, etc.
+        }
+    });
+
+    // Query memory periodically
+    let memory = client.get_memory().await?;
+    println!("Memory: {} MB / {} MB",
+        memory.in_use / 1024 / 1024,
+        memory.os_limit / 1024 / 1024
+    );
 
     Ok(())
 }
@@ -264,17 +289,18 @@ async fn main() -> Result<()> {
         println!("{} -> {}", group.name, group.now);
     }
 
-    // Stream logs - returns a receiver channel
-    let mut log_rx = client.stream_logs(None).await?;
+    // Stream traffic statistics
+    let mut traffic_rx = client.stream_traffic().await?;
+    tokio::spawn(async move {
+        while let Some(traffic) = traffic_rx.recv().await {
+            println!("↑ {} KB/s  ↓ {} KB/s",
+                traffic.up / 1024, traffic.down / 1024);
+        }
+    });
 
-    // Process logs as they arrive
-    while let Some(log) = log_rx.recv().await {
-        println!("{}", log);
-        // Third-party apps can process logs however they want:
-        // - Send to logging system
-        // - Store in database
-        // - Trigger alerts
-    }
+    // Get memory usage
+    let memory = client.get_memory().await?;
+    println!("Memory: {} MB", memory.in_use / 1024 / 1024);
 
     Ok(())
 }
