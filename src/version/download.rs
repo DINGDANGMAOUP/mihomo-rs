@@ -21,7 +21,7 @@ impl Downloader {
             "https://github.com/MetaCubeX/mihomo/releases/download/{}/{}",
             version, filename
         );
-
+        
         let resp = self
             .client
             .get(&url)

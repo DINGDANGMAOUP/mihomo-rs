@@ -44,22 +44,23 @@ impl VersionManager {
             )));
         }
 
-        fs::create_dir_all(&version_dir).await?;
-
         let binary_name = if cfg!(windows) {
             "mihomo.exe"
         } else {
             "mihomo"
         };
-        let binary_path = version_dir.join(binary_name);
+
+        // Download to OS temp directory first
+        let temp_dir = std::env::temp_dir();
+        let temp_path = temp_dir.join(format!("mihomo-{}-{}", version, binary_name));
 
         let downloader = Downloader::new();
-        let result = downloader.download_version(version, &binary_path).await;
+        downloader.download_version(version, &temp_path).await?;
 
-        if result.is_err() {
-            let _ = fs::remove_dir_all(&version_dir).await;
-            return result;
-        }
+        // Move to final location only after successful download
+        fs::create_dir_all(&version_dir).await?;
+        let binary_path = version_dir.join(binary_name);
+        fs::rename(&temp_path, &binary_path).await?;
 
         Ok(())
     }
