@@ -154,6 +154,14 @@ async fn run() -> anyhow::Result<()> {
         Commands::Start => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+
+            // Ensure default config exists
+            cm.ensure_default_config().await?;
+
+            // Ensure external-controller is configured before starting
+            let controller_url = cm.ensure_external_controller().await?;
+            log::info!("External controller configured at: {}", controller_url);
+
             let binary = vm.get_binary_path(None).await?;
             let config = cm.get_current_path().await?;
             let sm = ServiceManager::new(binary, config);
@@ -174,6 +182,14 @@ async fn run() -> anyhow::Result<()> {
         Commands::Restart => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+
+            // Ensure default config exists
+            cm.ensure_default_config().await?;
+
+            // Ensure external-controller is configured before restarting
+            let controller_url = cm.ensure_external_controller().await?;
+            log::info!("External controller configured at: {}", controller_url);
+
             let binary = vm.get_binary_path(None).await?;
             let config = cm.get_current_path().await?;
             let sm = ServiceManager::new(binary, config);
@@ -285,6 +301,45 @@ async fn run() -> anyhow::Result<()> {
                     }
                 }
             }
+        }
+
+        Commands::Logs { level } => {
+            let cm = ConfigManager::new()?;
+            let url = cm.get_external_controller().await?;
+            let client = MihomoClient::new(&url, None)?;
+            print_info("Streaming logs... (Press Ctrl+C to stop)");
+
+            let mut rx = client.stream_logs(level.as_deref()).await?;
+            while let Some(log) = rx.recv().await {
+                println!("{}", log);
+            }
+        }
+
+        Commands::Traffic => {
+            let cm = ConfigManager::new()?;
+            let url = cm.get_external_controller().await?;
+            let client = MihomoClient::new(&url, None)?;
+            print_info("Streaming traffic... (Press Ctrl+C to stop)");
+
+            let mut rx = client.stream_traffic().await?;
+            while let Some(traffic) = rx.recv().await {
+                println!(
+                    "↑ {} KB/s  ↓ {} KB/s",
+                    traffic.up / 1024,
+                    traffic.down / 1024
+                );
+            }
+        }
+
+        Commands::Memory => {
+            let cm = ConfigManager::new()?;
+            let url = cm.get_external_controller().await?;
+            let client = MihomoClient::new(&url, None)?;
+
+            let memory = client.get_memory().await?;
+            println!("Memory Usage:");
+            println!("  In Use:   {} MB", memory.in_use / 1024 / 1024);
+            println!("  OS Limit: {} MB", memory.os_limit / 1024 / 1024);
         }
     }
 

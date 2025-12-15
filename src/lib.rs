@@ -26,6 +26,14 @@ pub async fn install_mihomo(version: Option<&str>) -> Result<String> {
 
 pub async fn start_service(config_path: &Path) -> Result<()> {
     let vm = VersionManager::new()?;
+    let cm = ConfigManager::new()?;
+
+    // Ensure default config exists
+    cm.ensure_default_config().await?;
+
+    // Ensure external-controller is configured before starting
+    cm.ensure_external_controller().await?;
+
     let binary = vm.get_binary_path(None).await?;
     let sm = ServiceManager::new(binary, config_path.to_path_buf());
     sm.start().await
