@@ -48,8 +48,8 @@ async fn main() -> Result<()> {
 
     // Set up mihomo-rs
     println!("Setting up mihomo-rs management:");
-    let vm = VersionManager::new()?;
-    let cm = ConfigManager::new()?;
+    let _vm = VersionManager::new()?;
+    let _cm = ConfigManager::new()?;
 
     println!("  ✓ Version manager ready");
     println!("  ✓ Config manager ready");

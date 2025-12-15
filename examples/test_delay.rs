@@ -23,7 +23,6 @@
 
 use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, Result};
 use std::env;
-use std::time::Duration;
 use tokio::time::Instant;
 
 #[tokio::main]

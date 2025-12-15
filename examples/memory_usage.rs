@@ -98,9 +98,8 @@ async fn main() -> Result<()> {
                             total_usage += memory.in_use;
                             sample_count += 1;
 
-                            // Get current time
-                            let now = chrono::Local::now();
-                            let time_str = now.format("%H:%M:%S").to_string();
+                            // Get current sample number
+                            let time_str = format!("Sample #{}", sample_count);
 
                             println!(
                                 "{:<20} {:<15} {:<15} {:<10.2}",
