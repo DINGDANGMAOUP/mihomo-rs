@@ -35,8 +35,7 @@
 
 ```toml
 [dependencies]
-mihomo-rs = "1.0.1"
-tokio = { version = "1", features = ["full"] }
+mihomo-rs = "*"
 ```
 
 ### 作为 CLI 工具
