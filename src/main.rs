@@ -302,6 +302,18 @@ async fn run() -> anyhow::Result<()> {
                 }
             }
         }
+
+        Commands::Logs { level } => {
+            let cm = ConfigManager::new()?;
+            let url = cm.get_external_controller().await?;
+            let client = MihomoClient::new(&url, None)?;
+            print_info("Streaming logs... (Press Ctrl+C to stop)");
+
+            let mut rx = client.stream_logs(level.as_deref()).await?;
+            while let Some(log) = rx.recv().await {
+                println!("{}", log);
+            }
+        }
     }
 
     Ok(())

@@ -17,6 +17,9 @@ pub enum MihomoError {
     #[error("URL parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 
+    #[error("WebSocket error: {0}")]
+    WebSocket(#[from] tokio_tungstenite::tungstenite::Error),
+
     #[error("Config error: {0}")]
     Config(String),
 

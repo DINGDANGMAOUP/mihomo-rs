@@ -103,6 +103,19 @@ mihomo-rs proxy test
 mihomo-rs proxy current
 ```
 
+### Log Management
+
+```bash
+# Stream mihomo logs in real-time
+mihomo-rs logs
+
+# Filter logs by level
+mihomo-rs logs --level info
+mihomo-rs logs --level warning
+mihomo-rs logs --level error
+mihomo-rs logs --level debug
+```
+
 ## SDK Usage
 
 Add to your `Cargo.toml`:
@@ -141,6 +154,15 @@ cargo run --example switch_proxy
 
 # Test proxy delays
 cargo run --example test_delay
+
+# Stream logs in real-time
+cargo run --example stream_logs
+
+# Stream filtered logs (error level only)
+cargo run --example stream_logs_filtered
+
+# Advanced log processing example
+cargo run --example stream_logs_advanced
 ```
 
 ### Quick Start
@@ -166,6 +188,41 @@ async fn main() -> Result<()> {
 
     // Switch proxy
     proxy_manager.switch("Auto", "🇭🇰 HK01 • vLess").await?;
+
+    Ok(())
+}
+```
+
+### Log Streaming for Third-Party Applications
+
+The SDK provides a channel-based API for log streaming, allowing third-party applications to process logs flexibly:
+
+```rust
+use mihomo_rs::{ConfigManager, MihomoClient, Result};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let config_manager = ConfigManager::new()?;
+    let url = config_manager.get_external_controller().await?;
+    let client = MihomoClient::new(&url, None)?;
+
+    // Get log receiver channel
+    let mut log_rx = client.stream_logs(None).await?;
+
+    // Process logs in your application
+    tokio::spawn(async move {
+        while let Some(log) = log_rx.recv().await {
+            // Custom processing:
+            // - Parse and filter
+            // - Send to logging system
+            // - Store in database
+            // - Trigger alerts
+            // - Send to monitoring service
+            if log.contains("error") {
+                // Handle errors
+            }
+        }
+    });
 
     Ok(())
 }
@@ -205,6 +262,18 @@ async fn main() -> Result<()> {
     let groups = pm.list_groups().await?;
     for group in groups {
         println!("{} -> {}", group.name, group.now);
+    }
+
+    // Stream logs - returns a receiver channel
+    let mut log_rx = client.stream_logs(None).await?;
+
+    // Process logs as they arrive
+    while let Some(log) = log_rx.recv().await {
+        println!("{}", log);
+        // Third-party apps can process logs however they want:
+        // - Send to logging system
+        // - Store in database
+        // - Trigger alerts
     }
 
     Ok(())
