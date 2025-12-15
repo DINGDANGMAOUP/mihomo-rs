@@ -34,8 +34,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mihomo-rs = "1.0.1"
-tokio = { version = "1", features = ["full"] }
+mihomo-rs = "*"
 ```
 
 ### As a CLI Tool
