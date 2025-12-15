@@ -69,7 +69,11 @@ pub enum Commands {
 
     #[command(about = "Stream mihomo logs")]
     Logs {
-        #[arg(short, long, help = "Log level filter (info/warning/error/debug/silent)")]
+        #[arg(
+            short,
+            long,
+            help = "Log level filter (info/warning/error/debug/silent)"
+        )]
         level: Option<String>,
     },
 

@@ -110,7 +110,13 @@ impl MihomoClient {
         level: Option<&str>,
     ) -> Result<tokio::sync::mpsc::UnboundedReceiver<String>> {
         let mut ws_url = self.base_url.clone();
-        ws_url.set_scheme(if ws_url.scheme() == "https" { "wss" } else { "ws" }).ok();
+        ws_url
+            .set_scheme(if ws_url.scheme() == "https" {
+                "wss"
+            } else {
+                "ws"
+            })
+            .ok();
         ws_url.set_path("/logs");
         if let Some(level) = level {
             ws_url.set_query(Some(&format!("level={}", level)));
@@ -144,7 +150,13 @@ impl MihomoClient {
         &self,
     ) -> Result<tokio::sync::mpsc::UnboundedReceiver<TrafficData>> {
         let mut ws_url = self.base_url.clone();
-        ws_url.set_scheme(if ws_url.scheme() == "https" { "wss" } else { "ws" }).ok();
+        ws_url
+            .set_scheme(if ws_url.scheme() == "https" {
+                "wss"
+            } else {
+                "ws"
+            })
+            .ok();
         ws_url.set_path("/traffic");
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();

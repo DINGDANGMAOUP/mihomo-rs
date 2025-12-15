@@ -1,36 +1,96 @@
+//! Example: List Proxies
+//!
+//! This example demonstrates how to list all available proxy nodes.
+//! It shows:
+//! - Connecting to mihomo
+//! - Retrieving all proxy nodes (excluding groups)
+//! - Displaying proxy information (type, status, delay)
+//!
+//! ## Prerequisites
+//! - mihomo service must be running
+//! - Configuration with proxy nodes defined
+//!
+//! ## Running
+//! ```bash
+//! cargo run --example list_proxies
+//! ```
+
 use mihomo_rs::{ConfigManager, MihomoClient, ProxyManager, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Get the external controller URL from config
-    let config_manager = ConfigManager::new()?;
-    let url = config_manager.get_external_controller().await?;
-    println!("Connecting to mihomo at: {}", url);
+    env_logger::init();
 
-    // Create a client
+    println!("=== List All Proxy Nodes ===\n");
+
+    // Connect to mihomo
+    let cm = ConfigManager::new()?;
+    let url = cm.get_external_controller().await?;
     let client = MihomoClient::new(&url, None)?;
-    let proxy_manager = ProxyManager::new(client);
 
-    // List all proxy nodes
-    println!("\n=== Proxy Nodes ===");
-    let proxies = proxy_manager.list_proxies().await?;
-    for proxy in proxies {
-        let delay_str = proxy
-            .delay
-            .map(|d| format!("{}ms", d))
-            .unwrap_or_else(|| "-".to_string());
-        println!("{:<30} {:<15} {}", proxy.name, proxy.proxy_type, delay_str);
+    println!("Connected to: {}\n", url);
+
+    // Use ProxyManager for high-level operations
+    let pm = ProxyManager::new(client);
+
+    // List all proxy nodes (filters out groups)
+    println!("Fetching proxy nodes...");
+    let proxies = pm.list_proxies().await?;
+
+    if proxies.is_empty() {
+        println!("\nNo proxy nodes found.");
+        println!("Your configuration might only have proxy groups without individual proxies.");
+        return Ok(());
     }
 
-    // List all proxy groups
-    println!("\n=== Proxy Groups ===");
-    let groups = proxy_manager.list_groups().await?;
-    for group in groups {
+    println!("Found {} proxy node(s):\n", proxies.len());
+
+    // Display each proxy with details
+    for (i, proxy) in proxies.iter().enumerate() {
+        println!("{}. {}", i + 1, proxy.name);
+        println!("   Type: {}", proxy.proxy_type);
+
+        // Show status
+        let status = if proxy.alive { "✓ Alive" } else { "✗ Down" };
+        println!("   Status: {}", status);
+
+        // Show delay if available
+        if let Some(delay) = proxy.delay {
+            println!("   Delay: {} ms", delay);
+        } else {
+            println!("   Delay: Not tested");
+        }
+
+        println!();
+    }
+
+    // Statistics
+    let alive_count = proxies.iter().filter(|p| p.alive).count();
+    let down_count = proxies.len() - alive_count;
+
+    println!("=== Summary ===");
+    println!("Total proxies: {}", proxies.len());
+    println!("Alive: {}", alive_count);
+    println!("Down: {}", down_count);
+
+    // Show fastest proxy if we have delay data
+    let fastest = proxies
+        .iter()
+        .filter(|p| p.alive && p.delay.is_some())
+        .min_by_key(|p| p.delay.unwrap());
+
+    if let Some(proxy) = fastest {
         println!(
-            "{:<30} {:<15} Current: {}",
-            group.name, group.group_type, group.now
+            "\nFastest proxy: {} ({} ms)",
+            proxy.name,
+            proxy.delay.unwrap()
         );
     }
+
+    println!("\n=== Next Steps ===");
+    println!("  - List groups: cargo run --example list_groups");
+    println!("  - Test delays: cargo run --example test_delay");
+    println!("  - Switch proxy: cargo run --example switch_proxy");
 
     Ok(())
 }
