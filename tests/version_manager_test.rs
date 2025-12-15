@@ -1,7 +1,7 @@
 mod common;
 
-use mihomo_rs::{VersionManager, Result};
-use common::{setup_temp_home, get_temp_home_path};
+use common::{get_temp_home_path, setup_temp_home};
+use mihomo_rs::{Result, VersionManager};
 
 #[tokio::test]
 async fn test_version_manager_new() -> Result<()> {

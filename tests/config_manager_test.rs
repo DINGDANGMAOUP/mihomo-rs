@@ -1,7 +1,7 @@
 mod common;
 
+use common::{create_test_config, get_temp_home_path, setup_temp_home};
 use mihomo_rs::{ConfigManager, Result};
-use common::{setup_temp_home, get_temp_home_path, create_test_config};
 
 #[tokio::test]
 async fn test_config_manager_new() -> Result<()> {
