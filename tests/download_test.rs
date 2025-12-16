@@ -240,4 +240,3 @@ async fn test_real_download_invalid_version() -> Result<()> {
 
     Ok(())
 }
-
