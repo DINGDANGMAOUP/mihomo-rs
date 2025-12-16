@@ -192,6 +192,78 @@ impl MihomoClient {
         let resp = req.send().await?;
         Ok(resp.json().await?)
     }
+
+    pub async fn get_connections(&self) -> Result<ConnectionsResponse> {
+        let url = self.build_url("/connections")?;
+        log::debug!("Fetching connections from: {}", url);
+        let req = self.client.get(url);
+        let req = self.add_auth(req);
+        let resp = req.send().await?;
+        let data: ConnectionsResponse = resp.json().await?;
+        log::debug!("Received {} connections", data.connections.len());
+        Ok(data)
+    }
+
+    pub async fn close_all_connections(&self) -> Result<()> {
+        let url = self.build_url("/connections")?;
+        log::debug!("Closing all connections at: {}", url);
+        let req = self.client.delete(url);
+        let req = self.add_auth(req);
+        req.send().await?;
+        log::debug!("Successfully closed all connections");
+        Ok(())
+    }
+
+    pub async fn close_connection(&self, id: &str) -> Result<()> {
+        let url = self.build_url(&format!("/connections/{}", id))?;
+        log::debug!("Closing connection '{}' at: {}", id, url);
+        let req = self.client.delete(url);
+        let req = self.add_auth(req);
+        req.send().await?;
+        log::debug!("Successfully closed connection '{}'", id);
+        Ok(())
+    }
+
+    pub async fn stream_connections(
+        &self,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
+        let mut ws_url = self.base_url.clone();
+        ws_url
+            .set_scheme(if ws_url.scheme() == "https" {
+                "wss"
+            } else {
+                "ws"
+            })
+            .ok();
+        ws_url.set_path("/connections");
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let ws_url_str = ws_url.to_string();
+
+        tokio::spawn(async move {
+            if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                let (_, mut read) = ws_stream.split();
+                while let Some(msg) = read.next().await {
+                    match msg {
+                        Ok(Message::Text(text)) => {
+                            if let Ok(snapshot) =
+                                serde_json::from_str::<ConnectionSnapshot>(&text)
+                            {
+                                if tx.send(snapshot).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(Message::Close(_)) => break,
+                        Err(_) => break,
+                        _ => {}
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
 }
 
 #[cfg(test)]

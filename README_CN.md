@@ -24,6 +24,7 @@
 - 🚀 **服务生命周期** - 启动、停止、重启 mihomo 服务,支持 PID 管理
 - 🔄 **代理操作** - 列出、切换和测试代理节点及组
 - 📊 **实时监控** - 流式传输日志、流量统计和内存使用情况
+- 🔌 **连接管理** - 实时监控、过滤和关闭活动连接
 - 📦 **SDK 库** - 可作为库在 Rust 应用程序中使用
 - 🖥️ **CLI 工具** - 命令行界面,便于管理
 
@@ -49,7 +50,7 @@ cargo install mihomo-rs
 ### SDK 使用示例
 
 ```rust
-use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, Result};
+use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, ConnectionManager, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -70,7 +71,7 @@ async fn main() -> Result<()> {
 
     // 4. 使用代理管理器
     let client = MihomoClient::new(&controller_url, None)?;
-    let pm = ProxyManager::new(client);
+    let pm = ProxyManager::new(client.clone());
 
     // 列出代理组
     let groups = pm.list_groups().await?;
@@ -81,6 +82,28 @@ async fn main() -> Result<()> {
     // 切换代理
     pm.switch("GLOBAL", "proxy-name").await?;
 
+    // 5. 监控连接
+    let conn_mgr = ConnectionManager::new(client.clone());
+
+    // 列出活动连接
+    let connections = conn_mgr.list().await?;
+    println!("活动连接: {}", connections.len());
+
+    // 按主机过滤连接
+    let filtered = conn_mgr.filter_by_host("example.com").await?;
+
+    // 关闭特定连接
+    if let Some(conn) = connections.first() {
+        conn_mgr.close(&conn.id).await?;
+    }
+
+    // 6. 流式传输实时流量
+    let mut traffic_rx = client.stream_traffic().await?;
+    while let Some(traffic) = traffic_rx.recv().await {
+        println!("上传: {} KB/s, 下载: {} KB/s",
+            traffic.up / 1024, traffic.down / 1024);
+    }
+
     Ok(())
 }
 ```
@@ -89,10 +112,10 @@ async fn main() -> Result<()> {
 
 ```bash
 # 安装 mihomo
-mihomo-rs version install --channel stable
+mihomo-rs install stable
 
 # 启动服务
-mihomo-rs service start
+mihomo-rs start
 
 # 列出代理
 mihomo-rs proxy list
@@ -100,13 +123,34 @@ mihomo-rs proxy list
 # 切换代理
 mihomo-rs proxy switch GLOBAL proxy-name
 
-# 监控流量
-mihomo-rs monitor traffic
+# 流式传输日志(带级别过滤)
+mihomo-rs logs --level info
+
+# 流式传输流量统计
+mihomo-rs traffic
+
+# 显示内存使用
+mihomo-rs memory
+
+# 列出活动连接
+mihomo-rs connection list
+
+# 显示连接统计
+mihomo-rs connection stats
+
+# 实时流式传输连接
+mihomo-rs connection stream
+
+# 关闭特定连接
+mihomo-rs connection close <connection-id>
+
+# 关闭所有连接
+mihomo-rs connection close-all --force
 ```
 
 ## 示例
 
-[examples/](./examples/) 目录包含 28 个按类别组织的综合示例:
+[examples/](./examples/) 目录包含综合示例:
 
 - **快速开始** - 基础示例和完整工作流程
 - **版本管理** - 安装、列出和管理版本
@@ -114,6 +158,7 @@ mihomo-rs monitor traffic
 - **服务管理** - 启动、停止、重启和状态检查
 - **代理操作** - 列出、切换和测试代理
 - **监控** - 实时日志、流量和内存监控
+- **连接管理** - 列出、过滤、关闭和实时监控活动连接
 - **高级用法** - 自定义主目录、错误处理、并发操作
 - **集成** - 首次设置和迁移指南
 
@@ -135,6 +180,7 @@ cargo run --example hello_mihomo
 | `ConfigManager` | 管理配置文件 |
 | `ServiceManager` | 控制服务生命周期 |
 | `ProxyManager` | 高级代理操作 |
+| `ConnectionManager` | 监控和管理活动连接 |
 
 ### 主要类型
 
@@ -146,6 +192,9 @@ cargo run --example hello_mihomo
 | `TrafficData` | 上传/下载统计 |
 | `MemoryData` | 内存使用信息 |
 | `Channel` | 发布渠道(Stable/Beta/Nightly) |
+| `Connection` | 活动连接信息 |
+| `ConnectionSnapshot` | 实时连接快照 |
+| `ConnectionMetadata` | 连接元数据(源、目标、进程等) |
 
 ## 配置
 
