@@ -136,16 +136,132 @@ fn test_os_detection_coverage() {
     );
 }
 
-// Note: Actual download tests are intentionally omitted because they:
-// - Require network connectivity
-// - Download large binary files
-// - Depend on external GitHub infrastructure
-// - May be rate-limited by GitHub
-// - Take significant time to execute
+// ============================================================================
+// Real download tests - marked with #[ignore] by default
+// Run with: cargo test -- --ignored
+// ============================================================================
+
+#[tokio::test]
+#[ignore]
+async fn test_real_download_linux() -> Result<()> {
+    if cfg!(not(target_os = "linux")) {
+        println!("⊘ Skipping: not running on Linux");
+        return Ok(());
+    }
+
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let vm = VersionManager::with_home(home)?;
+
+    // Download a known stable version
+    let version = "v1.19.17";
+    println!("Testing real download of version {} on Linux", version);
+
+    match vm.install(version).await {
+        Ok(_) => {
+            println!("✅ Successfully downloaded and installed {}", version);
+            // Verify the binary was installed
+            let binary = vm.get_binary_path(Some(version)).await?;
+            assert!(binary.exists(), "Binary should exist after installation");
+            Ok(())
+        }
+        Err(e) => {
+            println!("⚠️  Download test failed: {}", e);
+            Err(e)
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_real_download_macos() -> Result<()> {
+    if cfg!(not(target_os = "macos")) {
+        println!("⊘ Skipping: not running on macOS");
+        return Ok(());
+    }
+
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let vm = VersionManager::with_home(home)?;
+
+    let version = "v1.19.17";
+    println!("Testing real download of version {} on macOS", version);
+
+    match vm.install(version).await {
+        Ok(_) => {
+            println!("✅ Successfully downloaded and installed {}", version);
+            let binary = vm.get_binary_path(Some(version)).await?;
+            assert!(binary.exists(), "Binary should exist after installation");
+            Ok(())
+        }
+        Err(e) => {
+            println!("⚠️  Download test failed: {}", e);
+            Err(e)
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_real_download_windows() -> Result<()> {
+    if cfg!(not(target_os = "windows")) {
+        println!("⊘ Skipping: not running on Windows");
+        return Ok(());
+    }
+
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let vm = VersionManager::with_home(home)?;
+
+    let version = "v1.19.17";
+    println!("Testing real download of version {} on Windows", version);
+
+    match vm.install(version).await {
+        Ok(_) => {
+            println!("✅ Successfully downloaded and installed {}", version);
+            let binary = vm.get_binary_path(Some(version)).await?;
+            assert!(binary.exists(), "Binary should exist after installation");
+            Ok(())
+        }
+        Err(e) => {
+            println!("⚠️  Download test failed: {}", e);
+            Err(e)
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_real_download_invalid_version() -> Result<()> {
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let vm = VersionManager::with_home(home)?;
+
+    // Try to download a version that doesn't exist
+    let version = "v999.999.999";
+    println!("Testing download of non-existent version {}", version);
+
+    let result = vm.install(version).await;
+    assert!(
+        result.is_err(),
+        "Should fail when downloading non-existent version"
+    );
+    println!("✅ Correctly failed for non-existent version");
+
+    Ok(())
+}
+
+// ============================================================================
+// Test Strategy Summary:
+// ============================================================================
+// 1. Unit tests (above): Verify logic without network - always run
+// 2. Mock tests: Test compression/decompression with mock data - always run
+// 3. Real download tests (here): Verify end-to-end functionality - manual
 //
-// These scenarios are better suited for:
-// - Manual testing
-// - End-to-end integration tests in a controlled environment
-// - CI/CD pipelines with proper network access and caching
+// To run real download tests:
+//   cargo test -- --ignored                    # Run only real download tests
+//   cargo test -- --include-ignored            # Run all tests including real downloads
 //
-// The unit tests above verify the logic without requiring actual downloads.
+// CI Strategy:
+//   - Regular CI: Run fast tests only (current setup)
+//   - Nightly/Weekly CI: Can add --include-ignored to verify real downloads
