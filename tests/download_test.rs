@@ -136,13 +136,7 @@ fn test_os_detection_coverage() {
     );
 }
 
-// ============================================================================
-// Real download tests - marked with #[ignore] by default
-// Run with: cargo test -- --ignored
-// ============================================================================
-
 #[tokio::test]
-#[ignore]
 async fn test_real_download_linux() -> Result<()> {
     if cfg!(not(target_os = "linux")) {
         println!("⊘ Skipping: not running on Linux");
@@ -173,7 +167,6 @@ async fn test_real_download_linux() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_real_download_macos() -> Result<()> {
     if cfg!(not(target_os = "macos")) {
         println!("⊘ Skipping: not running on macOS");
@@ -202,7 +195,6 @@ async fn test_real_download_macos() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_real_download_windows() -> Result<()> {
     if cfg!(not(target_os = "windows")) {
         println!("⊘ Skipping: not running on Windows");
@@ -231,13 +223,11 @@ async fn test_real_download_windows() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_real_download_invalid_version() -> Result<()> {
     let temp_dir = setup_temp_home();
     let home = get_temp_home_path(&temp_dir);
     let vm = VersionManager::with_home(home)?;
 
-    // Try to download a version that doesn't exist
     let version = "v999.999.999";
     println!("Testing download of non-existent version {}", version);
 
@@ -251,17 +241,3 @@ async fn test_real_download_invalid_version() -> Result<()> {
     Ok(())
 }
 
-// ============================================================================
-// Test Strategy Summary:
-// ============================================================================
-// 1. Unit tests (above): Verify logic without network - always run
-// 2. Mock tests: Test compression/decompression with mock data - always run
-// 3. Real download tests (here): Verify end-to-end functionality - manual
-//
-// To run real download tests:
-//   cargo test -- --ignored                    # Run only real download tests
-//   cargo test -- --include-ignored            # Run all tests including real downloads
-//
-// CI Strategy:
-//   - Regular CI: Run fast tests only (current setup)
-//   - Nightly/Weekly CI: Can add --include-ignored to verify real downloads
