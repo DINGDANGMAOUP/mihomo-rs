@@ -11,7 +11,6 @@ where
     Ok(opt.unwrap_or_default())
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Version {
     pub version: String,

@@ -246,8 +246,7 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(snapshot) =
-                                serde_json::from_str::<ConnectionSnapshot>(&text)
+                            if let Ok(snapshot) = serde_json::from_str::<ConnectionSnapshot>(&text)
                             {
                                 if tx.send(snapshot).is_err() {
                                     break;

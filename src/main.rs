@@ -537,7 +537,10 @@ async fn run() -> anyhow::Result<()> {
                     }
 
                     let count = conn_mgr.close_by_host(&host).await?;
-                    print_success(&format!("Closed {} connection(s) for host '{}'", count, host));
+                    print_success(&format!(
+                        "Closed {} connection(s) for host '{}'",
+                        count, host
+                    ));
                 }
 
                 ConnectionAction::CloseByProcess { process, force } => {

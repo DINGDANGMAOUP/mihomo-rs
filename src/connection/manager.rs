@@ -78,9 +78,7 @@ impl ConnectionManager {
         ))
     }
 
-    pub async fn stream(
-        &self,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
+    pub async fn stream(&self) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
         self.client.stream_connections().await
     }
 
@@ -154,5 +152,4 @@ mod tests {
         assert_eq!(conn.upload, 1024);
         assert_eq!(conn.download, 2048);
     }
-
 }
