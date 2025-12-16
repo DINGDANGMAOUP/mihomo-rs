@@ -16,7 +16,9 @@ impl Downloader {
 
     pub async fn download_version(&self, version: &str, dest: &Path) -> Result<()> {
         let platform = Self::detect_platform();
-        let filename = format!("mihomo-{}-{}-{}.gz", Self::get_os_name(), platform, version);
+        let os_name = Self::get_os_name();
+        let extension = Self::get_file_extension();
+        let filename = format!("mihomo-{}-{}-{}.{}", os_name, platform, version, extension);
         let url = format!(
             "https://github.com/MetaCubeX/mihomo/releases/download/{}/{}",
             version, filename
@@ -39,13 +41,12 @@ impl Downloader {
 
         let bytes = resp.bytes().await?;
 
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-        let mut decoder = GzDecoder::new(&bytes[..]);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| MihomoError::Version(format!("Failed to decompress: {}", e)))?;
+        // Decompress based on file extension
+        let decompressed = if extension == "zip" {
+            Self::decompress_zip(&bytes)?
+        } else {
+            Self::decompress_gz(&bytes)?
+        };
 
         let mut file = fs::File::create(dest).await?;
         file.write_all(&decompressed).await?;
@@ -79,6 +80,51 @@ impl Downloader {
             _ => "amd64",
         }
         .to_string()
+    }
+
+    fn get_file_extension() -> &'static str {
+        match std::env::consts::OS {
+            "windows" => "zip",
+            _ => "gz",
+        }
+    }
+
+    fn decompress_gz(bytes: &[u8]) -> Result<Vec<u8>> {
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+
+        let mut decoder = GzDecoder::new(bytes);
+        let mut decompressed = Vec::new();
+        decoder
+            .read_to_end(&mut decompressed)
+            .map_err(|e| MihomoError::Version(format!("Failed to decompress gz: {}", e)))?;
+        Ok(decompressed)
+    }
+
+    fn decompress_zip(bytes: &[u8]) -> Result<Vec<u8>> {
+        use std::io::{Cursor, Read};
+        use zip::ZipArchive;
+
+        let reader = Cursor::new(bytes);
+        let mut archive = ZipArchive::new(reader)
+            .map_err(|e| MihomoError::Version(format!("Failed to open zip archive: {}", e)))?;
+
+        // mihomo zip archives should contain a single binary file
+        if archive.len() != 1 {
+            return Err(MihomoError::Version(format!(
+                "Expected 1 file in zip archive, found {}",
+                archive.len()
+            )));
+        }
+
+        let mut file = archive.by_index(0)
+            .map_err(|e| MihomoError::Version(format!("Failed to read zip entry: {}", e)))?;
+
+        let mut decompressed = Vec::new();
+        file.read_to_end(&mut decompressed)
+            .map_err(|e| MihomoError::Version(format!("Failed to decompress zip: {}", e)))?;
+
+        Ok(decompressed)
     }
 }
 
