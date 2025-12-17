@@ -1,11 +1,13 @@
 pub mod cli;
 pub mod config;
+pub mod connection;
 pub mod core;
 pub mod proxy;
 pub mod service;
 pub mod version;
 
 pub use config::{ConfigManager, Profile};
+pub use connection::ConnectionManager;
 pub use core::{MihomoClient, MihomoError, Result};
 pub use proxy::ProxyManager;
 pub use service::{ServiceManager, ServiceStatus};

@@ -23,6 +23,7 @@ A Rust SDK and CLI tool for [mihomo](https://github.com/MetaCubeX/mihomo) proxy 
 - 🚀 **Service Lifecycle** - Start, stop, restart mihomo service with PID management
 - 🔄 **Proxy Operations** - List, switch, and test proxy nodes and groups
 - 📊 **Real-time Monitoring** - Stream logs, traffic statistics, and memory usage
+- 🔌 **Connection Management** - Monitor, filter, and close active connections in real-time
 - 📦 **SDK Library** - Use as a library in your Rust applications
 - 🖥️ **CLI Tool** - Command-line interface for easy management
 
@@ -48,7 +49,7 @@ cargo install mihomo-rs
 ### SDK Usage
 
 ```rust
-use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, Result};
+use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, ConnectionManager, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -69,7 +70,7 @@ async fn main() -> Result<()> {
 
     // 4. Use proxy manager
     let client = MihomoClient::new(&controller_url, None)?;
-    let pm = ProxyManager::new(client);
+    let pm = ProxyManager::new(client.clone());
 
     // List proxy groups
     let groups = pm.list_groups().await?;
@@ -80,6 +81,28 @@ async fn main() -> Result<()> {
     // Switch proxy
     pm.switch("GLOBAL", "proxy-name").await?;
 
+    // 5. Monitor connections
+    let conn_mgr = ConnectionManager::new(client.clone());
+
+    // List active connections
+    let connections = conn_mgr.list().await?;
+    println!("Active connections: {}", connections.len());
+
+    // Filter connections by host
+    let filtered = conn_mgr.filter_by_host("example.com").await?;
+
+    // Close specific connection
+    if let Some(conn) = connections.first() {
+        conn_mgr.close(&conn.id).await?;
+    }
+
+    // 6. Stream real-time traffic
+    let mut traffic_rx = client.stream_traffic().await?;
+    while let Some(traffic) = traffic_rx.recv().await {
+        println!("Upload: {} KB/s, Download: {} KB/s",
+            traffic.up / 1024, traffic.down / 1024);
+    }
+
     Ok(())
 }
 ```
@@ -88,10 +111,10 @@ async fn main() -> Result<()> {
 
 ```bash
 # Install mihomo
-mihomo-rs version install --channel stable
+mihomo-rs install stable
 
 # Start service
-mihomo-rs service start
+mihomo-rs start
 
 # List proxies
 mihomo-rs proxy list
@@ -99,56 +122,82 @@ mihomo-rs proxy list
 # Switch proxy
 mihomo-rs proxy switch GLOBAL proxy-name
 
-# Monitor traffic
-mihomo-rs monitor traffic
+# Stream logs (with level filter)
+mihomo-rs logs --level info
+
+# Stream traffic statistics
+mihomo-rs traffic
+
+# Show memory usage
+mihomo-rs memory
+
+# List active connections
+mihomo-rs connection list
+
+# Show connection statistics
+mihomo-rs connection stats
+
+# Stream connections in real-time
+mihomo-rs connection stream
+
+# Close specific connection
+mihomo-rs connection close <connection-id>
+
+# Close all connections
+mihomo-rs connection close-all --force
 ```
 
 ## Examples
 
-The [examples/](./examples/) directory contains 28 comprehensive examples organized by category:
+The [examples/](./examples/) directory includes comprehensive examples:
 
 ### Quick Start
-- [hello_mihomo.rs](./examples/01_quickstart/hello_mihomo.rs) - Minimal example
-- [basic_workflow.rs](./examples/01_quickstart/basic_workflow.rs) - Complete beginner workflow
+- [hello_mihomo.rs](./examples/hello_mihomo.rs) - Minimal example
+- [basic_workflow.rs](./examples/basic_workflow.rs) - Complete beginner workflow
 
 ### Version Management
-- [install_version.rs](./examples/02_version_management/install_version.rs) - Install specific version
-- [install_by_channel.rs](./examples/02_version_management/install_by_channel.rs) - Install from channel
-- [list_versions.rs](./examples/02_version_management/list_versions.rs) - List installed versions
-- [manage_versions.rs](./examples/02_version_management/manage_versions.rs) - Version lifecycle
+- [install_version.rs](./examples/install_version.rs) - Install specific version
+- [install_by_channel.rs](./examples/install_by_channel.rs) - Install from channel
+- [list_versions.rs](./examples/list_versions.rs) - List installed versions
+- [manage_versions.rs](./examples/manage_versions.rs) - Version lifecycle
 
 ### Configuration
-- [manage_profiles.rs](./examples/03_configuration/manage_profiles.rs) - Profile management
-- [custom_config.rs](./examples/03_configuration/custom_config.rs) - Custom configuration
-- [external_controller.rs](./examples/03_configuration/external_controller.rs) - Controller setup
+- [manage_profiles.rs](./examples/manage_profiles.rs) - Profile management
+- [custom_config.rs](./examples/custom_config.rs) - Custom configuration
+- [external_controller.rs](./examples/external_controller.rs) - Controller setup
 
 ### Service Management
-- [service_lifecycle.rs](./examples/04_service/service_lifecycle.rs) - Start/stop/restart
-- [service_status.rs](./examples/04_service/service_status.rs) - Check status
-- [auto_restart.rs](./examples/04_service/auto_restart.rs) - Auto-restart logic
+- [service_lifecycle.rs](./examples/service_lifecycle.rs) - Start/stop/restart
+- [service_status.rs](./examples/service_status.rs) - Check status
+- [auto_restart.rs](./examples/auto_restart.rs) - Auto-restart logic
 
 ### Proxy Operations
-- [list_proxies.rs](./examples/05_proxy_operations/list_proxies.rs) - List all proxies
-- [list_groups.rs](./examples/05_proxy_operations/list_groups.rs) - List proxy groups
-- [switch_proxy.rs](./examples/05_proxy_operations/switch_proxy.rs) - Switch proxy
-- [test_delay.rs](./examples/05_proxy_operations/test_delay.rs) - Test latency
-- [current_proxy.rs](./examples/05_proxy_operations/current_proxy.rs) - Current selections
+- [list_proxies.rs](./examples/list_proxies.rs) - List all proxies
+- [list_groups.rs](./examples/list_groups.rs) - List proxy groups
+- [switch_proxy.rs](./examples/switch_proxy.rs) - Switch proxy
+- [test_delay.rs](./examples/test_delay.rs) - Test latency
+- [current_proxy.rs](./examples/current_proxy.rs) - Current selections
 
 ### Monitoring
-- [stream_logs.rs](./examples/06_monitoring/stream_logs.rs) - Real-time logs
-- [stream_logs_filtered.rs](./examples/06_monitoring/stream_logs_filtered.rs) - Filtered logs
-- [stream_traffic.rs](./examples/06_monitoring/stream_traffic.rs) - Traffic monitoring
-- [memory_usage.rs](./examples/06_monitoring/memory_usage.rs) - Memory usage
+- [stream_logs.rs](./examples/stream_logs.rs) - Real-time logs
+- [stream_logs_filtered.rs](./examples/stream_logs_filtered.rs) - Filtered logs
+- [stream_traffic.rs](./examples/stream_traffic.rs) - Traffic monitoring
+- [memory_usage.rs](./examples/memory_usage.rs) - Memory usage
+
+### Connection Management
+- [list_connections.rs](./examples/list_connections.rs) - List active connections with filtering
+- [close_connections.rs](./examples/close_connections.rs) - Close connections by ID, host, or process
+- [stream_connections.rs](./examples/stream_connections.rs) - Real-time connection monitoring
 
 ### Advanced
-- [custom_home_dir.rs](./examples/07_advanced/custom_home_dir.rs) - Custom home directory
-- [complete_workflow.rs](./examples/07_advanced/complete_workflow.rs) - Full application
-- [error_handling.rs](./examples/07_advanced/error_handling.rs) - Error patterns
-- [concurrent_operations.rs](./examples/07_advanced/concurrent_operations.rs) - Parallel ops
+- [custom_home_dir.rs](./examples/custom_home_dir.rs) - Custom home directory
+- [complete_workflow.rs](./examples/complete_workflow.rs) - Full application
+- [error_handling.rs](./examples/error_handling.rs) - Error patterns
+- [concurrent_operations.rs](./examples/concurrent_operations.rs) - Parallel ops
 
 ### Integration
-- [first_time_setup.rs](./examples/08_integration/first_time_setup.rs) - First-time setup
-- [migration_helper.rs](./examples/08_integration/migration_helper.rs) - Migration guide
+- [first_time_setup.rs](./examples/first_time_setup.rs) - First-time setup
+- [migration_helper.rs](./examples/migration_helper.rs) - Migration guide
 
 Run any example with:
 ```bash
@@ -181,8 +230,10 @@ mihomo-rs/
 │   ├── proxy/          # Proxy operations
 │   │   ├── manager.rs  # ProxyManager
 │   │   └── test.rs     # Delay testing
+│   ├── connection/     # Connection management
+│   │   └── manager.rs  # ConnectionManager
 │   └── cli/            # CLI application
-├── examples/           # 28 comprehensive examples
+├── examples/           # 31 comprehensive examples
 └── tests/              # Integration tests
 ```
 
@@ -197,6 +248,7 @@ mihomo-rs/
 | `ConfigManager` | Manage configuration profiles |
 | `ServiceManager` | Control service lifecycle |
 | `ProxyManager` | High-level proxy operations |
+| `ConnectionManager` | Monitor and manage active connections |
 
 ### Key Types
 
@@ -208,6 +260,9 @@ mihomo-rs/
 | `TrafficData` | Upload/download statistics |
 | `MemoryData` | Memory usage information |
 | `Channel` | Release channel (Stable/Beta/Nightly) |
+| `Connection` | Active connection information |
+| `ConnectionSnapshot` | Real-time connections snapshot |
+| `ConnectionMetadata` | Connection metadata (source, destination, process, etc.) |
 
 ### Top-level Functions
 

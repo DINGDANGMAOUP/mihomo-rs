@@ -82,6 +82,12 @@ pub enum Commands {
 
     #[command(about = "Show memory usage")]
     Memory,
+
+    #[command(about = "Connection management")]
+    Connection {
+        #[command(subcommand)]
+        action: ConnectionAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -136,4 +142,71 @@ pub enum ProxyAction {
 
     #[command(about = "Show current proxies")]
     Current,
+}
+
+#[derive(Subcommand)]
+pub enum ConnectionAction {
+    #[command(about = "List active connections")]
+    List,
+
+    #[command(about = "Show connection statistics")]
+    Stats,
+
+    #[command(about = "Stream connections in real-time")]
+    Stream,
+
+    #[command(about = "Close a specific connection")]
+    Close {
+        #[arg(help = "Connection ID")]
+        id: String,
+    },
+
+    #[command(about = "Close all connections")]
+    CloseAll {
+        #[arg(
+            short,
+            long,
+            help = "Skip confirmation prompt",
+            default_value = "false"
+        )]
+        force: bool,
+    },
+
+    #[command(about = "Filter connections by host")]
+    FilterHost {
+        #[arg(help = "Host name or IP to filter")]
+        host: String,
+    },
+
+    #[command(about = "Filter connections by process")]
+    FilterProcess {
+        #[arg(help = "Process name to filter")]
+        process: String,
+    },
+
+    #[command(about = "Close connections by host")]
+    CloseByHost {
+        #[arg(help = "Host name or IP")]
+        host: String,
+        #[arg(
+            short,
+            long,
+            help = "Skip confirmation prompt",
+            default_value = "false"
+        )]
+        force: bool,
+    },
+
+    #[command(about = "Close connections by process")]
+    CloseByProcess {
+        #[arg(help = "Process name")]
+        process: String,
+        #[arg(
+            short,
+            long,
+            help = "Skip confirmation prompt",
+            default_value = "false"
+        )]
+        force: bool,
+    },
 }

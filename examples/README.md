@@ -7,10 +7,6 @@ This directory contains comprehensive examples demonstrating all features of the
 To run an example:
 
 ```bash
-# Run example by full path
-cargo run --example 01_quickstart/hello_mihomo
-
-# Or with just the name
 cargo run --example hello_mihomo
 ```
 
@@ -22,7 +18,6 @@ RUST_LOG=debug cargo run --example hello_mihomo
 
 ## Example Categories
 
-### 01_quickstart/
 
 Basic examples for getting started:
 
@@ -31,7 +26,6 @@ Basic examples for getting started:
 
 **Prerequisites**: None (examples will guide you through setup)
 
-### 02_version_management/
 
 Examples for managing mihomo versions:
 
@@ -42,7 +36,6 @@ Examples for managing mihomo versions:
 
 **Prerequisites**: Internet connection for downloading mihomo binaries
 
-### 03_configuration/
 
 Examples for configuration and profile management:
 
@@ -52,7 +45,6 @@ Examples for configuration and profile management:
 
 **Prerequisites**: mihomo installed (run version_management examples first)
 
-### 04_service/
 
 Examples for service lifecycle management:
 
@@ -62,7 +54,6 @@ Examples for service lifecycle management:
 
 **Prerequisites**: mihomo installed and configured
 
-### 05_proxy_operations/
 
 Examples for proxy management (most commonly used):
 
@@ -74,7 +65,6 @@ Examples for proxy management (most commonly used):
 
 **Prerequisites**: mihomo service running with valid configuration
 
-### 06_monitoring/
 
 Examples for real-time monitoring:
 
@@ -85,7 +75,15 @@ Examples for real-time monitoring:
 
 **Prerequisites**: mihomo service running
 
-### 07_advanced/
+
+Examples for monitoring and managing active connections:
+
+- **list_connections.rs** - List all active connections with detailed information (source, destination, proxy chain, traffic)
+- **close_connections.rs** - Close connections by ID, host, or process name
+- **stream_connections.rs** - Real-time connection monitoring with statistics and traffic updates
+
+**Prerequisites**: mihomo service running with active network traffic
+
 
 Advanced usage patterns:
 
@@ -96,7 +94,6 @@ Advanced usage patterns:
 
 **Prerequisites**: Understanding of basic examples
 
-### 08_integration/
 
 Integration scenarios and migration helpers:
 
@@ -200,6 +197,52 @@ async fn main() -> Result<()> {
 }
 ```
 
+### Connection Management
+
+Working with active connections:
+
+```rust
+use mihomo_rs::{ConfigManager, MihomoClient, ConnectionManager};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cm = ConfigManager::new()?;
+    let url = cm.get_external_controller().await?;
+    let client = MihomoClient::new(&url, None)?;
+
+    // Create connection manager
+    let conn_mgr = ConnectionManager::new(client);
+
+    // List active connections
+    let connections = conn_mgr.list().await?;
+    println!("Active connections: {}", connections.len());
+
+    // Get connection statistics
+    let (download, upload, count) = conn_mgr.get_statistics().await?;
+    println!("Total: {} connections, ↓ {} KB, ↑ {} KB",
+        count, download / 1024, upload / 1024);
+
+    // Filter connections by host
+    let filtered = conn_mgr.filter_by_host("example.com").await?;
+
+    // Close specific connection
+    if let Some(conn) = connections.first() {
+        conn_mgr.close(&conn.id).await?;
+    }
+
+    // Stream real-time connection updates
+    let mut rx = conn_mgr.stream().await?;
+    while let Some(snapshot) = rx.recv().await {
+        println!("Connections: {}, Traffic: ↓ {} KB / ↑ {} KB",
+            snapshot.connections.len(),
+            snapshot.download_total / 1024,
+            snapshot.upload_total / 1024);
+    }
+
+    Ok(())
+}
+```
+
 ## Troubleshooting
 
 ### "Connection refused" errors
@@ -249,11 +292,12 @@ chmod +x ~/.config/mihomo-rs/versions/*/mihomo
 
 ## Next Steps
 
-1. Start with **01_quickstart/hello_mihomo.rs** or **basic_workflow.rs**
-2. Learn version management with **02_version_management/** examples
-3. Explore proxy operations with **05_proxy_operations/** examples
-4. Try real-time monitoring with **06_monitoring/** examples
-5. Study advanced patterns in **07_advanced/** examples
+1. Start with **hello_mihomo.rs** or **basic_workflow.rs**
+2. Learn version management with **/** examples
+3. Explore proxy operations with **/** examples
+4. Try real-time monitoring with **/** examples
+5. Manage connections with **list_connections.rs**, **close_connections.rs**, and **stream_connections.rs**
+6. Study advanced patterns in **/** examples
 
 ## See Also
 

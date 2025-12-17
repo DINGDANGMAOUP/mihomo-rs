@@ -1,6 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Helper function to deserialize null as empty vec
+fn deserialize_null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let opt = Option::<Vec<T>>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Version {
     pub version: String,
@@ -76,6 +86,82 @@ pub struct MemoryData {
     pub in_use: u64,
     #[serde(rename = "oslimit")]
     pub os_limit: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Connection {
+    pub id: String,
+    #[serde(default)]
+    pub metadata: ConnectionMetadata,
+    #[serde(default)]
+    pub upload: u64,
+    #[serde(default)]
+    pub download: u64,
+    #[serde(default)]
+    pub start: String,
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
+    pub chains: Vec<String>,
+    #[serde(default)]
+    pub rule: String,
+    #[serde(rename = "rulePayload")]
+    #[serde(default)]
+    pub rule_payload: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConnectionMetadata {
+    #[serde(default)]
+    pub network: String,
+    #[serde(rename = "type")]
+    #[serde(default)]
+    pub connection_type: String,
+    #[serde(rename = "sourceIP")]
+    #[serde(default)]
+    pub source_ip: String,
+    #[serde(rename = "destinationIP")]
+    #[serde(default)]
+    pub destination_ip: String,
+    #[serde(rename = "sourcePort")]
+    #[serde(default)]
+    pub source_port: String,
+    #[serde(rename = "destinationPort")]
+    #[serde(default)]
+    pub destination_port: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(rename = "dnsMode")]
+    #[serde(default)]
+    pub dns_mode: String,
+    #[serde(rename = "processPath")]
+    #[serde(default)]
+    pub process_path: String,
+    #[serde(rename = "specialProxy")]
+    #[serde(default)]
+    pub special_proxy: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionsResponse {
+    #[serde(rename = "downloadTotal")]
+    #[serde(default)]
+    pub download_total: u64,
+    #[serde(rename = "uploadTotal")]
+    #[serde(default)]
+    pub upload_total: u64,
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
+    pub connections: Vec<Connection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionSnapshot {
+    #[serde(rename = "downloadTotal")]
+    #[serde(default)]
+    pub download_total: u64,
+    #[serde(rename = "uploadTotal")]
+    #[serde(default)]
+    pub upload_total: u64,
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
+    pub connections: Vec<Connection>,
 }
 
 #[cfg(test)]
@@ -230,5 +316,180 @@ mod tests {
         assert_eq!(info.now, None);
         assert_eq!(info.all, None);
         assert!(info.history.is_empty());
+    }
+
+    #[test]
+    fn test_connections_response_with_empty_connections() {
+        let json = r#"{
+            "downloadTotal": 1024,
+            "uploadTotal": 2048,
+            "connections": []
+        }"#;
+        let response: ConnectionsResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.download_total, 1024);
+        assert_eq!(response.upload_total, 2048);
+        assert_eq!(response.connections.len(), 0);
+    }
+
+    #[test]
+    fn test_connections_response_with_null_connections() {
+        let json = r#"{
+            "downloadTotal": 1024,
+            "uploadTotal": 2048,
+            "connections": null
+        }"#;
+        let response: ConnectionsResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.download_total, 1024);
+        assert_eq!(response.upload_total, 2048);
+        assert_eq!(response.connections.len(), 0);
+    }
+
+    #[test]
+    fn test_connections_response_minimal() {
+        let json = r#"{}"#;
+        let response: ConnectionsResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.download_total, 0);
+        assert_eq!(response.upload_total, 0);
+        assert_eq!(response.connections.len(), 0);
+    }
+
+    #[test]
+    fn test_connection_with_minimal_fields() {
+        let json = r#"{"id":"test-id"}"#;
+        let conn: Connection = serde_json::from_str(json).unwrap();
+
+        assert_eq!(conn.id, "test-id");
+        assert_eq!(conn.upload, 0);
+        assert_eq!(conn.download, 0);
+        assert_eq!(conn.start, "");
+        assert!(conn.chains.is_empty());
+        assert_eq!(conn.rule, "");
+    }
+
+    #[test]
+    fn test_connection_snapshot_serialization() {
+        let snapshot = ConnectionSnapshot {
+            download_total: 1024,
+            upload_total: 2048,
+            connections: vec![],
+        };
+
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let deserialized: ConnectionSnapshot = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.download_total, 1024);
+        assert_eq!(deserialized.upload_total, 2048);
+        assert_eq!(deserialized.connections.len(), 0);
+    }
+
+    #[test]
+    fn test_connection_full_serialization() {
+        let json = r#"{
+            "id": "test-connection-id",
+            "metadata": {
+                "network": "tcp",
+                "type": "HTTP",
+                "sourceIP": "192.168.1.100",
+                "destinationIP": "1.1.1.1",
+                "sourcePort": "54321",
+                "destinationPort": "443",
+                "host": "example.com",
+                "dnsMode": "normal",
+                "processPath": "/usr/bin/chrome",
+                "specialProxy": ""
+            },
+            "upload": 1024,
+            "download": 2048,
+            "start": "2024-01-01T00:00:00Z",
+            "chains": ["DIRECT"],
+            "rule": "DOMAIN,example.com",
+            "rulePayload": "example.com"
+        }"#;
+
+        let conn: Connection = serde_json::from_str(json).unwrap();
+
+        assert_eq!(conn.id, "test-connection-id");
+        assert_eq!(conn.metadata.network, "tcp");
+        assert_eq!(conn.metadata.connection_type, "HTTP");
+        assert_eq!(conn.metadata.source_ip, "192.168.1.100");
+        assert_eq!(conn.metadata.destination_ip, "1.1.1.1");
+        assert_eq!(conn.metadata.host, "example.com");
+        assert_eq!(conn.upload, 1024);
+        assert_eq!(conn.download, 2048);
+        assert_eq!(conn.chains, vec!["DIRECT"]);
+        assert_eq!(conn.rule, "DOMAIN,example.com");
+    }
+
+    #[test]
+    fn test_connection_with_null_chains() {
+        let json = r#"{
+            "id": "test-id",
+            "chains": null
+        }"#;
+        let conn: Connection = serde_json::from_str(json).unwrap();
+
+        assert_eq!(conn.id, "test-id");
+        assert!(conn.chains.is_empty());
+    }
+
+    #[test]
+    fn test_connection_metadata_default() {
+        let metadata = ConnectionMetadata::default();
+
+        assert_eq!(metadata.network, "");
+        assert_eq!(metadata.connection_type, "");
+        assert_eq!(metadata.source_ip, "");
+        assert_eq!(metadata.destination_ip, "");
+        assert_eq!(metadata.source_port, "");
+        assert_eq!(metadata.destination_port, "");
+        assert_eq!(metadata.host, "");
+        assert_eq!(metadata.dns_mode, "");
+        assert_eq!(metadata.process_path, "");
+        assert_eq!(metadata.special_proxy, "");
+    }
+
+    #[test]
+    fn test_connections_response_with_data() {
+        let json = r#"{
+            "downloadTotal": 1048576,
+            "uploadTotal": 524288,
+            "connections": [
+                {
+                    "id": "conn-1",
+                    "upload": 1024,
+                    "download": 2048,
+                    "start": "2024-01-01T00:00:00Z",
+                    "chains": ["DIRECT"],
+                    "rule": "DIRECT"
+                }
+            ]
+        }"#;
+
+        let response: ConnectionsResponse = serde_json::from_str(json).unwrap();
+
+        assert_eq!(response.download_total, 1048576);
+        assert_eq!(response.upload_total, 524288);
+        assert_eq!(response.connections.len(), 1);
+        assert_eq!(response.connections[0].id, "conn-1");
+        assert_eq!(response.connections[0].upload, 1024);
+        assert_eq!(response.connections[0].download, 2048);
+    }
+
+    #[test]
+    fn test_connection_snapshot_with_null_connections() {
+        let json = r#"{
+            "downloadTotal": 100,
+            "uploadTotal": 200,
+            "connections": null
+        }"#;
+
+        let snapshot: ConnectionSnapshot = serde_json::from_str(json).unwrap();
+
+        assert_eq!(snapshot.download_total, 100);
+        assert_eq!(snapshot.upload_total, 200);
+        assert_eq!(snapshot.connections.len(), 0);
     }
 }

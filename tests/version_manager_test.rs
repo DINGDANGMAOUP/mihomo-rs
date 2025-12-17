@@ -53,9 +53,3 @@ async fn test_get_binary_path_when_none_installed() {
     let result = vm.get_binary_path(None).await;
     assert!(result.is_err());
 }
-
-// Note: We don't test actual installation in unit tests as it requires:
-// - Network connection
-// - Downloading large binaries
-// - Platform-specific behavior
-// These are better suited for integration tests or manual testing
