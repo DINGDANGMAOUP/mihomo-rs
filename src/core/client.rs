@@ -268,6 +268,7 @@ impl MihomoClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockito::{Matcher, Server};
 
     #[test]
     fn test_client_new() {
@@ -311,5 +312,236 @@ mod tests {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let cloned = client.clone();
         assert_eq!(client.base_url, cloned.base_url);
+    }
+
+    #[tokio::test]
+    async fn test_get_version() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/version")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"version":"v1.18.0","premium":true,"meta":true}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_version().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+        let version = result.unwrap();
+        assert_eq!(version.version, "v1.18.0");
+    }
+
+    #[tokio::test]
+    async fn test_get_proxies() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/proxies")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"proxies":{"DIRECT":{"type":"Direct","udp":true,"now":"","all":[],"history":[]}}}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_proxies().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+        let proxies = result.unwrap();
+        assert!(proxies.contains_key("DIRECT"));
+    }
+
+    #[tokio::test]
+    async fn test_get_proxy() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/proxies/DIRECT")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"type":"Direct","udp":true,"now":"","all":[],"history":[]}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_proxy("DIRECT").await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_switch_proxy() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/proxies/GLOBAL")
+            .match_body(Matcher::Json(serde_json::json!({"name":"proxy1"})))
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.switch_proxy("GLOBAL", "proxy1").await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_test_delay() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/proxies/proxy1/delay")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("timeout".into(), "5000".into()),
+                Matcher::UrlEncoded("url".into(), "http://www.gstatic.com/generate_204".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"delay":123}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client
+            .test_delay("proxy1", "http://www.gstatic.com/generate_204", 5000)
+            .await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 123);
+    }
+
+    #[tokio::test]
+    async fn test_reload_config_with_path() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/configs")
+            .match_query(Matcher::UrlEncoded("force".into(), "true".into()))
+            .match_body(Matcher::Json(
+                serde_json::json!({"path":"/path/to/config.yaml"}),
+            ))
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.reload_config(Some("/path/to/config.yaml")).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_reload_config_without_path() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/configs")
+            .match_query(Matcher::UrlEncoded("force".into(), "true".into()))
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.reload_config(None).await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_memory() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/memory")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"inuse":12345678,"oslimit":2147483648}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_memory().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+        let memory = result.unwrap();
+        assert_eq!(memory.in_use, 12345678);
+        assert_eq!(memory.os_limit, 2147483648);
+    }
+
+    #[tokio::test]
+    async fn test_get_connections() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/connections")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"connections":[],"downloadTotal":0,"uploadTotal":0}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_connections().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+        let connections = result.unwrap();
+        assert_eq!(connections.connections.len(), 0);
+        assert_eq!(connections.download_total, 0);
+        assert_eq!(connections.upload_total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_close_all_connections() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("DELETE", "/connections")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.close_all_connections().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_close_connection() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("DELETE", "/connections/test-id-123")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.close_connection("test-id-123").await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_client_with_auth() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/version")
+            .match_header("authorization", "Bearer my-secret")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"version":"v1.18.0","premium":true,"meta":true}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), Some("my-secret".to_string())).unwrap();
+        let result = client.get_version().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
     }
 }
