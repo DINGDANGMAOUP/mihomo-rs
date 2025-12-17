@@ -292,12 +292,12 @@ chmod +x ~/.config/mihomo-rs/versions/*/mihomo
 
 ## Next Steps
 
-1. Start with **01_quickstart/hello_mihomo.rs** or **basic_workflow.rs**
-2. Learn version management with **02_version_management/** examples
-3. Explore proxy operations with **05_proxy_operations/** examples
-4. Try real-time monitoring with **06_monitoring/** examples
+1. Start with **hello_mihomo.rs** or **basic_workflow.rs**
+2. Learn version management with **/** examples
+3. Explore proxy operations with **/** examples
+4. Try real-time monitoring with **/** examples
 5. Manage connections with **list_connections.rs**, **close_connections.rs**, and **stream_connections.rs**
-6. Study advanced patterns in **07_advanced/** examples
+6. Study advanced patterns in **/** examples
 
 ## See Also
 

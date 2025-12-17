@@ -152,37 +152,37 @@ mihomo-rs connection close-all --force
 The [examples/](./examples/) directory includes comprehensive examples:
 
 ### Quick Start
-- [hello_mihomo.rs](./examples/01_quickstart/hello_mihomo.rs) - Minimal example
-- [basic_workflow.rs](./examples/01_quickstart/basic_workflow.rs) - Complete beginner workflow
+- [hello_mihomo.rs](./examples/hello_mihomo.rs) - Minimal example
+- [basic_workflow.rs](./examples/basic_workflow.rs) - Complete beginner workflow
 
 ### Version Management
-- [install_version.rs](./examples/02_version_management/install_version.rs) - Install specific version
-- [install_by_channel.rs](./examples/02_version_management/install_by_channel.rs) - Install from channel
-- [list_versions.rs](./examples/02_version_management/list_versions.rs) - List installed versions
-- [manage_versions.rs](./examples/02_version_management/manage_versions.rs) - Version lifecycle
+- [install_version.rs](./examples/install_version.rs) - Install specific version
+- [install_by_channel.rs](./examples/install_by_channel.rs) - Install from channel
+- [list_versions.rs](./examples/list_versions.rs) - List installed versions
+- [manage_versions.rs](./examples/manage_versions.rs) - Version lifecycle
 
 ### Configuration
-- [manage_profiles.rs](./examples/03_configuration/manage_profiles.rs) - Profile management
-- [custom_config.rs](./examples/03_configuration/custom_config.rs) - Custom configuration
-- [external_controller.rs](./examples/03_configuration/external_controller.rs) - Controller setup
+- [manage_profiles.rs](./examples/manage_profiles.rs) - Profile management
+- [custom_config.rs](./examples/custom_config.rs) - Custom configuration
+- [external_controller.rs](./examples/external_controller.rs) - Controller setup
 
 ### Service Management
-- [service_lifecycle.rs](./examples/04_service/service_lifecycle.rs) - Start/stop/restart
-- [service_status.rs](./examples/04_service/service_status.rs) - Check status
-- [auto_restart.rs](./examples/04_service/auto_restart.rs) - Auto-restart logic
+- [service_lifecycle.rs](./examples/service_lifecycle.rs) - Start/stop/restart
+- [service_status.rs](./examples/service_status.rs) - Check status
+- [auto_restart.rs](./examples/auto_restart.rs) - Auto-restart logic
 
 ### Proxy Operations
-- [list_proxies.rs](./examples/05_proxy_operations/list_proxies.rs) - List all proxies
-- [list_groups.rs](./examples/05_proxy_operations/list_groups.rs) - List proxy groups
-- [switch_proxy.rs](./examples/05_proxy_operations/switch_proxy.rs) - Switch proxy
-- [test_delay.rs](./examples/05_proxy_operations/test_delay.rs) - Test latency
-- [current_proxy.rs](./examples/05_proxy_operations/current_proxy.rs) - Current selections
+- [list_proxies.rs](./examples/list_proxies.rs) - List all proxies
+- [list_groups.rs](./examples/list_groups.rs) - List proxy groups
+- [switch_proxy.rs](./examples/switch_proxy.rs) - Switch proxy
+- [test_delay.rs](./examples/test_delay.rs) - Test latency
+- [current_proxy.rs](./examples/current_proxy.rs) - Current selections
 
 ### Monitoring
-- [stream_logs.rs](./examples/06_monitoring/stream_logs.rs) - Real-time logs
-- [stream_logs_filtered.rs](./examples/06_monitoring/stream_logs_filtered.rs) - Filtered logs
-- [stream_traffic.rs](./examples/06_monitoring/stream_traffic.rs) - Traffic monitoring
-- [memory_usage.rs](./examples/06_monitoring/memory_usage.rs) - Memory usage
+- [stream_logs.rs](./examples/stream_logs.rs) - Real-time logs
+- [stream_logs_filtered.rs](./examples/stream_logs_filtered.rs) - Filtered logs
+- [stream_traffic.rs](./examples/stream_traffic.rs) - Traffic monitoring
+- [memory_usage.rs](./examples/memory_usage.rs) - Memory usage
 
 ### Connection Management
 - [list_connections.rs](./examples/list_connections.rs) - List active connections with filtering
@@ -190,14 +190,14 @@ The [examples/](./examples/) directory includes comprehensive examples:
 - [stream_connections.rs](./examples/stream_connections.rs) - Real-time connection monitoring
 
 ### Advanced
-- [custom_home_dir.rs](./examples/07_advanced/custom_home_dir.rs) - Custom home directory
-- [complete_workflow.rs](./examples/07_advanced/complete_workflow.rs) - Full application
-- [error_handling.rs](./examples/07_advanced/error_handling.rs) - Error patterns
-- [concurrent_operations.rs](./examples/07_advanced/concurrent_operations.rs) - Parallel ops
+- [custom_home_dir.rs](./examples/custom_home_dir.rs) - Custom home directory
+- [complete_workflow.rs](./examples/complete_workflow.rs) - Full application
+- [error_handling.rs](./examples/error_handling.rs) - Error patterns
+- [concurrent_operations.rs](./examples/concurrent_operations.rs) - Parallel ops
 
 ### Integration
-- [first_time_setup.rs](./examples/08_integration/first_time_setup.rs) - First-time setup
-- [migration_helper.rs](./examples/08_integration/migration_helper.rs) - Migration guide
+- [first_time_setup.rs](./examples/first_time_setup.rs) - First-time setup
+- [migration_helper.rs](./examples/migration_helper.rs) - Migration guide
 
 Run any example with:
 ```bash
