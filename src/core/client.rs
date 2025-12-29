@@ -131,7 +131,7 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if tx.send(text).is_err() {
+                            if tx.send(text.to_string()).is_err() {
                                 break;
                             }
                         }
@@ -168,7 +168,8 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(traffic) = serde_json::from_str::<TrafficData>(&text) {
+                            if let Ok(traffic) = serde_json::from_str::<TrafficData>(text.as_ref())
+                            {
                                 if tx.send(traffic).is_err() {
                                     break;
                                 }
@@ -246,7 +247,8 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(snapshot) = serde_json::from_str::<ConnectionSnapshot>(&text)
+                            if let Ok(snapshot) =
+                                serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
                             {
                                 if tx.send(snapshot).is_err() {
                                     break;
