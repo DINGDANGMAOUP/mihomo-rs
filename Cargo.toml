@@ -30,7 +30,7 @@ dirs = "6.0"
 toml = "0.9"
 flate2 = "1.0"
 zip = "7.0"
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 
 [dev-dependencies]

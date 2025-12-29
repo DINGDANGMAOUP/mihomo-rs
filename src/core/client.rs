@@ -131,7 +131,7 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if tx.send(text).is_err() {
+                            if tx.send(text.to_string()).is_err() {
                                 break;
                             }
                         }
@@ -168,7 +168,8 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(traffic) = serde_json::from_str::<TrafficData>(&text) {
+                            if let Ok(traffic) = serde_json::from_str::<TrafficData>(text.as_ref())
+                            {
                                 if tx.send(traffic).is_err() {
                                     break;
                                 }
@@ -246,7 +247,8 @@ impl MihomoClient {
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(snapshot) = serde_json::from_str::<ConnectionSnapshot>(&text)
+                            if let Ok(snapshot) =
+                                serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
                             {
                                 if tx.send(snapshot).is_err() {
                                     break;
@@ -269,6 +271,8 @@ impl MihomoClient {
 mod tests {
     use super::*;
     use mockito::{Matcher, Server};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 
     #[test]
     fn test_client_new() {
@@ -543,5 +547,74 @@ mod tests {
 
         mock.assert_async().await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_stream_logs_message_handling() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let ws = accept_async(stream).await.unwrap();
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text("test log".into())).await.ok();
+        });
+
+        let client = MihomoClient::new(&format!("http://{}", addr), None).unwrap();
+        let mut rx = client.stream_logs(None).await.unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .ok();
+    }
+
+    #[tokio::test]
+    async fn test_stream_traffic_message_handling() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let ws = accept_async(stream).await.unwrap();
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text(r#"{"up":100,"down":200}"#.into()))
+                .await
+                .ok();
+        });
+
+        let client = MihomoClient::new(&format!("http://{}", addr), None).unwrap();
+        let mut rx = client.stream_traffic().await.unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .ok();
+    }
+
+    #[tokio::test]
+    async fn test_stream_connections_message_handling() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let ws = accept_async(stream).await.unwrap();
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text(
+                r#"{"connections":[],"downloadTotal":0,"uploadTotal":0}"#.into(),
+            ))
+            .await
+            .ok();
+        });
+
+        let client = MihomoClient::new(&format!("http://{}", addr), None).unwrap();
+        let mut rx = client.stream_connections().await.unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .ok();
     }
 }
