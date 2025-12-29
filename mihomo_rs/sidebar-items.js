@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["install_mihomo","start_service","stop_service","switch_proxy"],"mod":["cli","config","connection","core","proxy","service","version"]};

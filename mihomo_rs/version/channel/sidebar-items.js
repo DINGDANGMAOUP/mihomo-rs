@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Channel"],"fn":["fetch_latest","fetch_releases"],"struct":["ChannelInfo","ReleaseInfo"]};

@@ -1,0 +1,2 @@
+createSrcSidebar('[["mihomo_rs",["",[["cli",[],["commands.rs","mod.rs","output.rs"]],["config",[],["manager.rs","mod.rs","profile.rs"]],["connection",[],["manager.rs","mod.rs"]],["core",[],["client.rs","error.rs","home.rs","mod.rs","port.rs","types.rs"]],["proxy",[],["manager.rs","mod.rs","test.rs"]],["service",[],["manager.rs","mod.rs","process.rs"]],["version",[],["channel.rs","download.rs","manager.rs","mod.rs"]]],["lib.rs"]]]]');
+//{"start":19,"fragment_lengths":[414]}
