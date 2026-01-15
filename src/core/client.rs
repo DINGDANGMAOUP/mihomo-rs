@@ -734,6 +734,34 @@ mod tests {
         // Just verify that cloning works without panicking
     }
 
+    #[test]
+    #[cfg(unix)]
+    fn test_client_new_unix_socket() {
+        let client = MihomoClient::new("/var/run/mihomo.sock", None);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_client_new_unix_socket_uri() {
+        let client = MihomoClient::new("unix:///var/run/mihomo.sock", None);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_client_new_named_pipe() {
+        let client = MihomoClient::new("/mihomo", None);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_client_new_named_pipe_full_path() {
+        let client = MihomoClient::new("\\\\.\\pipe\\mihomo", None);
+        assert!(client.is_ok());
+    }
+
     #[tokio::test]
     async fn test_get_version() {
         let mut server = Server::new_async().await;
