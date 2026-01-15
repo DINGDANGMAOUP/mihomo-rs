@@ -24,7 +24,8 @@ impl MihomoClient {
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
         let transport = if base_url.starts_with('/')
             || base_url.starts_with("unix://")
-            || base_url.starts_with(r"\\") {
+            || base_url.starts_with(r"\\")
+        {
             let path = base_url.strip_prefix("unix://").unwrap_or(base_url);
             Transport::Unix {
                 socket_path: PathBuf::from(path),
