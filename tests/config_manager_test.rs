@@ -141,3 +141,49 @@ async fn test_get_current_path() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_get_external_controller_unix_socket() -> Result<()> {
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+
+    let cm = ConfigManager::with_home(home)?;
+
+    // Test Unix socket with absolute path
+    let config_unix = r#"
+port: 7890
+socks-port: 7891
+external-controller: /var/run/mihomo.sock
+"#;
+    cm.save("unix-test", config_unix).await?;
+    cm.set_current("unix-test").await?;
+
+    let controller = cm.get_external_controller().await?;
+    assert_eq!(controller, "/var/run/mihomo.sock");
+
+    // Test Unix socket with URI scheme
+    let config_unix_uri = r#"
+port: 7890
+socks-port: 7891
+external-controller: unix:///var/run/mihomo.sock
+"#;
+    cm.save("unix-uri-test", config_unix_uri).await?;
+    cm.set_current("unix-uri-test").await?;
+
+    let controller_uri = cm.get_external_controller().await?;
+    assert_eq!(controller_uri, "unix:///var/run/mihomo.sock");
+
+    // Test TCP (existing behavior)
+    let config_tcp = r#"
+port: 7890
+socks-port: 7891
+external-controller: 127.0.0.1:9090
+"#;
+    cm.save("tcp-test", config_tcp).await?;
+    cm.set_current("tcp-test").await?;
+
+    let controller_tcp = cm.get_external_controller().await?;
+    assert_eq!(controller_tcp, "http://127.0.0.1:9090");
+
+    Ok(())
+}

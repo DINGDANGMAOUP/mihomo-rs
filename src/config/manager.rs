@@ -199,6 +199,12 @@ external-controller: 127.0.0.1:{}
             .and_then(|v| v.as_str())
             .unwrap_or("127.0.0.1:9090");
 
+        // Detect Unix socket paths
+        if controller.starts_with('/') || controller.starts_with("unix://") {
+            log::debug!("Detected Unix socket path: {}", controller);
+            return Ok(controller.to_string());
+        }
+
         let url = if controller.starts_with(':') {
             format!("http://127.0.0.1{}", controller)
         } else if controller.starts_with("http://") || controller.starts_with("https://") {

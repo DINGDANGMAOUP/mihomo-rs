@@ -4,29 +4,137 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
 #[derive(Clone)]
+enum Transport {
+    Tcp { client: Client, base_url: Url },
+    Unix { socket_path: PathBuf },
+}
+
+#[derive(Clone)]
 pub struct MihomoClient {
-    client: Client,
-    base_url: Url,
+    transport: Transport,
     secret: Option<String>,
 }
 
 impl MihomoClient {
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
-        let base_url = Url::parse(base_url)?;
-        let client = Client::new();
-        Ok(Self {
-            client,
-            base_url,
-            secret,
-        })
+        let transport = if base_url.starts_with('/') {
+            Transport::Unix {
+                socket_path: PathBuf::from(base_url),
+            }
+        } else if let Some(path) = base_url.strip_prefix("unix://") {
+            Transport::Unix {
+                socket_path: PathBuf::from(path),
+            }
+        } else {
+            let url = Url::parse(base_url)?;
+            Transport::Tcp {
+                client: Client::new(),
+                base_url: url,
+            }
+        };
+
+        Ok(Self { transport, secret })
     }
 
-    fn build_url(&self, path: &str) -> Result<Url> {
-        Ok(self.base_url.join(path)?)
+    async fn http_request(
+        &self,
+        method: &str,
+        path: &str,
+        query: Option<&[(&str, String)]>,
+        body: Option<serde_json::Value>,
+    ) -> Result<Vec<u8>> {
+        match &self.transport {
+            Transport::Tcp { client, base_url } => {
+                let url = base_url.join(path)?;
+                let mut req = match method {
+                    "GET" => client.get(url),
+                    "PUT" => client.put(url),
+                    "DELETE" => client.delete(url),
+                    _ => return Err(super::error::MihomoError::Config("Unsupported method".into())),
+                };
+
+                if let Some(q) = query {
+                    req = req.query(q);
+                }
+                if let Some(b) = body {
+                    req = req.json(&b);
+                }
+                req = self.add_auth(req);
+
+                let resp = req.send().await?;
+                Ok(resp.bytes().await?.to_vec())
+            }
+            Transport::Unix { socket_path } => {
+                self.unix_http_request(method, path, query, body, socket_path)
+                    .await
+            }
+        }
+    }
+
+    async fn unix_http_request(
+        &self,
+        method: &str,
+        path: &str,
+        query: Option<&[(&str, String)]>,
+        body: Option<serde_json::Value>,
+        socket_path: &PathBuf,
+    ) -> Result<Vec<u8>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::UnixStream;
+
+        let mut stream = UnixStream::connect(socket_path).await?;
+
+        let query_str = query
+            .map(|q| {
+                let params: Vec<String> = q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+                format!("?{}", params.join("&"))
+            })
+            .unwrap_or_default();
+
+        let body_str = body
+            .map(|b| serde_json::to_string(&b).unwrap())
+            .unwrap_or_default();
+
+        let auth_header = self
+            .secret
+            .as_ref()
+            .map(|s| format!("Authorization: Bearer {}\r\n", s))
+            .unwrap_or_default();
+
+        let request = format!(
+            "{} {}{} HTTP/1.1\r\n\
+             Host: localhost\r\n\
+             Content-Length: {}\r\n\
+             Content-Type: application/json\r\n\
+             {}\r\n\
+             {}",
+            method,
+            path,
+            query_str,
+            body_str.len(),
+            auth_header,
+            body_str
+        );
+
+        stream.write_all(request.as_bytes()).await?;
+        stream.flush().await?;
+
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await?;
+
+        let response_str = String::from_utf8_lossy(&response);
+        if let Some(pos) = response_str.find("\r\n\r\n") {
+            Ok(response[pos + 4..].to_vec())
+        } else {
+            Err(super::error::MihomoError::Config(
+                "Invalid HTTP response".into(),
+            ))
+        }
     }
 
     fn add_auth(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -37,71 +145,66 @@ impl MihomoClient {
     }
 
     pub async fn get_version(&self) -> Result<Version> {
-        let url = self.build_url("/version")?;
-        let req = self.client.get(url);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        Ok(resp.json().await?)
+        let response = self.http_request("GET", "/version", None, None).await?;
+        Ok(serde_json::from_slice(&response)?)
     }
 
     pub async fn get_proxies(&self) -> Result<HashMap<String, ProxyInfo>> {
-        let url = self.build_url("/proxies")?;
-        log::debug!("Fetching proxies from: {}", url);
-        let req = self.client.get(url);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        let data: ProxiesResponse = resp.json().await?;
+        log::debug!("Fetching proxies");
+        let response = self.http_request("GET", "/proxies", None, None).await?;
+        let data: ProxiesResponse = serde_json::from_slice(&response)?;
         log::debug!("Received {} proxies", data.proxies.len());
         Ok(data.proxies)
     }
 
     pub async fn get_proxy(&self, name: &str) -> Result<ProxyInfo> {
-        let url = self.build_url(&format!("/proxies/{}", name))?;
-        let req = self.client.get(url);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        Ok(resp.json().await?)
+        let response = self
+            .http_request("GET", &format!("/proxies/{}", name), None, None)
+            .await?;
+        Ok(serde_json::from_slice(&response)?)
     }
 
     pub async fn switch_proxy(&self, group: &str, proxy: &str) -> Result<()> {
-        let url = self.build_url(&format!("/proxies/{}", group))?;
-        log::debug!(
-            "Switching group '{}' to proxy '{}' at {}",
-            group,
-            proxy,
-            url
-        );
-        let req = self.client.put(url).json(&json!({ "name": proxy }));
-        let req = self.add_auth(req);
-        req.send().await?;
+        log::debug!("Switching group '{}' to proxy '{}'", group, proxy);
+        self.http_request(
+            "PUT",
+            &format!("/proxies/{}", group),
+            None,
+            Some(json!({ "name": proxy })),
+        )
+        .await?;
         log::debug!("Successfully switched group '{}' to '{}'", group, proxy);
         Ok(())
     }
 
     pub async fn test_delay(&self, proxy: &str, test_url: &str, timeout: u32) -> Result<u32> {
-        let url = self.build_url(&format!("/proxies/{}/delay", proxy))?;
-        let req = self.client.get(url).query(&[
-            ("timeout", timeout.to_string()),
-            ("url", test_url.to_string()),
-        ]);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        let data: DelayTestResponse = resp.json().await?;
+        let response = self
+            .http_request(
+                "GET",
+                &format!("/proxies/{}/delay", proxy),
+                Some(&[
+                    ("timeout", timeout.to_string()),
+                    ("url", test_url.to_string()),
+                ]),
+                None,
+            )
+            .await?;
+        let data: DelayTestResponse = serde_json::from_slice(&response)?;
         Ok(data.delay)
     }
 
     pub async fn reload_config(&self, path: Option<&str>) -> Result<()> {
-        let url = self.build_url("/configs")?;
-        let mut req = self.client.put(url);
-        if let Some(path) = path {
-            req = req
-                .query(&[("force", "true")])
-                .json(&json!({ "path": path }));
+        let (query, body) = if let Some(p) = path {
+            (
+                Some(vec![("force", "true".to_string())]),
+                Some(json!({ "path": p })),
+            )
         } else {
-            req = req.query(&[("force", "true")]);
-        }
-        let req = self.add_auth(req);
-        req.send().await?;
+            (Some(vec![("force", "true".to_string())]), None)
+        };
+
+        self.http_request("PUT", "/configs", query.as_deref(), body)
+            .await?;
         Ok(())
     }
 
@@ -109,39 +212,85 @@ impl MihomoClient {
         &self,
         level: Option<&str>,
     ) -> Result<tokio::sync::mpsc::UnboundedReceiver<String>> {
-        let mut ws_url = self.base_url.clone();
-        ws_url
-            .set_scheme(if ws_url.scheme() == "https" {
-                "wss"
-            } else {
-                "ws"
-            })
-            .ok();
-        ws_url.set_path("/logs");
-        if let Some(level) = level {
-            ws_url.set_query(Some(&format!("level={}", level)));
-        }
-
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let ws_url_str = ws_url.to_string();
 
-        tokio::spawn(async move {
-            if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
-                let (_, mut read) = ws_stream.split();
-                while let Some(msg) = read.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if tx.send(text.to_string()).is_err() {
-                                break;
+        match &self.transport {
+            Transport::Tcp { base_url, .. } => {
+                let mut ws_url = base_url.clone();
+                ws_url
+                    .set_scheme(if ws_url.scheme() == "https" {
+                        "wss"
+                    } else {
+                        "ws"
+                    })
+                    .ok();
+                ws_url.set_path("/logs");
+                if let Some(level) = level {
+                    ws_url.set_query(Some(&format!("level={}", level)));
+                }
+
+                let ws_url_str = ws_url.to_string();
+                tokio::spawn(async move {
+                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if tx.send(text.to_string()).is_err() {
+                                        break;
+                                    }
+                                }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
                             }
                         }
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {}
                     }
-                }
+                });
             }
-        });
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+                let level = level.map(|s| s.to_string());
+
+                tokio::spawn(async move {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                        let mut path = "/logs".to_string();
+                        if let Some(l) = level {
+                            path.push_str(&format!("?level={}", l));
+                        }
+
+                        let request = format!(
+                            "GET {} HTTP/1.1\r\n\
+                             Host: localhost\r\n\
+                             Upgrade: websocket\r\n\
+                             Connection: Upgrade\r\n\
+                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                             Sec-WebSocket-Version: 13\r\n\r\n",
+                            path
+                        );
+
+                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                            let (_, mut read) = ws_stream.split();
+                            while let Some(msg) = read.next().await {
+                                match msg {
+                                    Ok(Message::Text(text)) => {
+                                        if tx.send(text.to_string()).is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Ok(Message::Close(_)) => break,
+                                    Err(_) => break,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(rx)
     }
@@ -149,78 +298,110 @@ impl MihomoClient {
     pub async fn stream_traffic(
         &self,
     ) -> Result<tokio::sync::mpsc::UnboundedReceiver<TrafficData>> {
-        let mut ws_url = self.base_url.clone();
-        ws_url
-            .set_scheme(if ws_url.scheme() == "https" {
-                "wss"
-            } else {
-                "ws"
-            })
-            .ok();
-        ws_url.set_path("/traffic");
-
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let ws_url_str = ws_url.to_string();
 
-        tokio::spawn(async move {
-            if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
-                let (_, mut read) = ws_stream.split();
-                while let Some(msg) = read.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if let Ok(traffic) = serde_json::from_str::<TrafficData>(text.as_ref())
-                            {
-                                if tx.send(traffic).is_err() {
-                                    break;
+        match &self.transport {
+            Transport::Tcp { base_url, .. } => {
+                let mut ws_url = base_url.clone();
+                ws_url
+                    .set_scheme(if ws_url.scheme() == "https" {
+                        "wss"
+                    } else {
+                        "ws"
+                    })
+                    .ok();
+                ws_url.set_path("/traffic");
+
+                let ws_url_str = ws_url.to_string();
+                tokio::spawn(async move {
+                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if let Ok(traffic) =
+                                        serde_json::from_str::<TrafficData>(text.as_ref())
+                                    {
+                                        if tx.send(traffic).is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
+                            }
+                        }
+                    }
+                });
+            }
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+
+                tokio::spawn(async move {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                        let request = "GET /traffic HTTP/1.1\r\n\
+                             Host: localhost\r\n\
+                             Upgrade: websocket\r\n\
+                             Connection: Upgrade\r\n\
+                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                             Sec-WebSocket-Version: 13\r\n\r\n";
+
+                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                            let (_, mut read) = ws_stream.split();
+                            while let Some(msg) = read.next().await {
+                                match msg {
+                                    Ok(Message::Text(text)) => {
+                                        if let Ok(traffic) =
+                                            serde_json::from_str::<TrafficData>(text.as_ref())
+                                        {
+                                            if tx.send(traffic).is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    Ok(Message::Close(_)) => break,
+                                    Err(_) => break,
+                                    _ => {}
                                 }
                             }
                         }
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {}
                     }
-                }
+                });
             }
-        });
+        }
 
         Ok(rx)
     }
 
     pub async fn get_memory(&self) -> Result<MemoryData> {
-        let url = self.build_url("/memory")?;
-        let req = self.client.get(url);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        Ok(resp.json().await?)
+        let response = self.http_request("GET", "/memory", None, None).await?;
+        Ok(serde_json::from_slice(&response)?)
     }
 
     pub async fn get_connections(&self) -> Result<ConnectionsResponse> {
-        let url = self.build_url("/connections")?;
-        log::debug!("Fetching connections from: {}", url);
-        let req = self.client.get(url);
-        let req = self.add_auth(req);
-        let resp = req.send().await?;
-        let data: ConnectionsResponse = resp.json().await?;
+        log::debug!("Fetching connections");
+        let response = self.http_request("GET", "/connections", None, None).await?;
+        let data: ConnectionsResponse = serde_json::from_slice(&response)?;
         log::debug!("Received {} connections", data.connections.len());
         Ok(data)
     }
 
     pub async fn close_all_connections(&self) -> Result<()> {
-        let url = self.build_url("/connections")?;
-        log::debug!("Closing all connections at: {}", url);
-        let req = self.client.delete(url);
-        let req = self.add_auth(req);
-        req.send().await?;
+        log::debug!("Closing all connections");
+        self.http_request("DELETE", "/connections", None, None)
+            .await?;
         log::debug!("Successfully closed all connections");
         Ok(())
     }
 
     pub async fn close_connection(&self, id: &str) -> Result<()> {
-        let url = self.build_url(&format!("/connections/{}", id))?;
-        log::debug!("Closing connection '{}' at: {}", id, url);
-        let req = self.client.delete(url);
-        let req = self.add_auth(req);
-        req.send().await?;
+        log::debug!("Closing connection '{}'", id);
+        self.http_request("DELETE", &format!("/connections/{}", id), None, None)
+            .await?;
         log::debug!("Successfully closed connection '{}'", id);
         Ok(())
     }
@@ -228,40 +409,81 @@ impl MihomoClient {
     pub async fn stream_connections(
         &self,
     ) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
-        let mut ws_url = self.base_url.clone();
-        ws_url
-            .set_scheme(if ws_url.scheme() == "https" {
-                "wss"
-            } else {
-                "ws"
-            })
-            .ok();
-        ws_url.set_path("/connections");
-
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let ws_url_str = ws_url.to_string();
 
-        tokio::spawn(async move {
-            if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
-                let (_, mut read) = ws_stream.split();
-                while let Some(msg) = read.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if let Ok(snapshot) =
-                                serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
-                            {
-                                if tx.send(snapshot).is_err() {
-                                    break;
+        match &self.transport {
+            Transport::Tcp { base_url, .. } => {
+                let mut ws_url = base_url.clone();
+                ws_url
+                    .set_scheme(if ws_url.scheme() == "https" {
+                        "wss"
+                    } else {
+                        "ws"
+                    })
+                    .ok();
+                ws_url.set_path("/connections");
+
+                let ws_url_str = ws_url.to_string();
+                tokio::spawn(async move {
+                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if let Ok(snapshot) =
+                                        serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
+                                    {
+                                        if tx.send(snapshot).is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
+                            }
+                        }
+                    }
+                });
+            }
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+
+                tokio::spawn(async move {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                        let request = "GET /connections HTTP/1.1\r\n\
+                             Host: localhost\r\n\
+                             Upgrade: websocket\r\n\
+                             Connection: Upgrade\r\n\
+                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                             Sec-WebSocket-Version: 13\r\n\r\n";
+
+                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                            let (_, mut read) = ws_stream.split();
+                            while let Some(msg) = read.next().await {
+                                match msg {
+                                    Ok(Message::Text(text)) => {
+                                        if let Ok(snapshot) =
+                                            serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
+                                        {
+                                            if tx.send(snapshot).is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    Ok(Message::Close(_)) => break,
+                                    Err(_) => break,
+                                    _ => {}
                                 }
                             }
                         }
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {}
                     }
-                }
+                });
             }
-        });
+        }
 
         Ok(rx)
     }
@@ -293,29 +515,10 @@ mod tests {
     }
 
     #[test]
-    fn test_build_url() {
-        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
-        let url = client.build_url("/version");
-        assert!(url.is_ok());
-        assert_eq!(url.unwrap().as_str(), "http://127.0.0.1:9090/version");
-    }
-
-    #[test]
-    fn test_build_url_with_path() {
-        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
-        let url = client.build_url("/proxies/GLOBAL");
-        assert!(url.is_ok());
-        assert_eq!(
-            url.unwrap().as_str(),
-            "http://127.0.0.1:9090/proxies/GLOBAL"
-        );
-    }
-
-    #[test]
     fn test_client_clone() {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
-        let cloned = client.clone();
-        assert_eq!(client.base_url, cloned.base_url);
+        let _cloned = client.clone();
+        // Just verify that cloning works without panicking
     }
 
     #[tokio::test]
@@ -457,6 +660,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_memory() {
+
         let mut server = Server::new_async().await;
         let mock = server
             .mock("GET", "/memory")
