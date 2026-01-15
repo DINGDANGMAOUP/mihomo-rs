@@ -86,54 +86,126 @@ impl MihomoClient {
         socket_path: &PathBuf,
     ) -> Result<Vec<u8>> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        use tokio::net::UnixStream;
 
-        let mut stream = UnixStream::connect(socket_path).await?;
+        #[cfg(unix)]
+        {
+            use tokio::net::UnixStream;
+            let mut stream = UnixStream::connect(socket_path).await?;
 
-        let query_str = query
-            .map(|q| {
-                let params: Vec<String> = q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
-                format!("?{}", params.join("&"))
-            })
-            .unwrap_or_default();
+            let query_str = query
+                .map(|q| {
+                    let params: Vec<String> =
+                        q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+                    format!("?{}", params.join("&"))
+                })
+                .unwrap_or_default();
 
-        let body_str = body
-            .map(|b| serde_json::to_string(&b).unwrap())
-            .unwrap_or_default();
+            let body_str = body
+                .map(|b| serde_json::to_string(&b).unwrap())
+                .unwrap_or_default();
 
-        let auth_header = self
-            .secret
-            .as_ref()
-            .map(|s| format!("Authorization: Bearer {}\r\n", s))
-            .unwrap_or_default();
+            let auth_header = self
+                .secret
+                .as_ref()
+                .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                .unwrap_or_default();
 
-        let request = format!(
-            "{} {}{} HTTP/1.1\r\n\
-             Host: localhost\r\n\
-             Content-Length: {}\r\n\
-             Content-Type: application/json\r\n\
-             {}\r\n\
-             {}",
-            method,
-            path,
-            query_str,
-            body_str.len(),
-            auth_header,
-            body_str
-        );
+            let request = format!(
+                "{} {}{} HTTP/1.1\r\n\
+                 Host: localhost\r\n\
+                 Content-Length: {}\r\n\
+                 Content-Type: application/json\r\n\
+                 {}\r\n\
+                 {}",
+                method,
+                path,
+                query_str,
+                body_str.len(),
+                auth_header,
+                body_str
+            );
 
-        stream.write_all(request.as_bytes()).await?;
-        stream.flush().await?;
+            stream.write_all(request.as_bytes()).await?;
+            stream.flush().await?;
 
-        let mut response = Vec::new();
-        stream.read_to_end(&mut response).await?;
+            let mut response = Vec::new();
+            stream.read_to_end(&mut response).await?;
 
-        let response_str = String::from_utf8_lossy(&response);
-        if let Some(pos) = response_str.find("\r\n\r\n") {
-            Ok(response[pos + 4..].to_vec())
-        } else {
+            let response_str = String::from_utf8_lossy(&response);
+            if let Some(pos) = response_str.find("\r\n\r\n") {
+                Ok(response[pos + 4..].to_vec())
+            } else {
+                Err(super::error::MihomoError::Config(
+                    "Invalid HTTP response".into(),
+                ))
+            }
+        }
+        #[cfg(windows)]
+        {
+            use tokio::net::windows::named_pipe::ClientOptions;
+
+            let pipe_path = socket_path.to_string_lossy();
+            let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                pipe_path.to_string()
+            } else {
+                format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+            };
+
+            let mut stream = ClientOptions::new().open(&pipe_name)?;
+
+            let query_str = query
+                .map(|q| {
+                    let params: Vec<String> =
+                        q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+                    format!("?{}", params.join("&"))
+                })
+                .unwrap_or_default();
+
+            let body_str = body
+                .map(|b| serde_json::to_string(&b).unwrap())
+                .unwrap_or_default();
+
+            let auth_header = self
+                .secret
+                .as_ref()
+                .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                .unwrap_or_default();
+
+            let request = format!(
+                "{} {}{} HTTP/1.1\r\n\
+                 Host: localhost\r\n\
+                 Content-Length: {}\r\n\
+                 Content-Type: application/json\r\n\
+                 {}\r\n\
+                 {}",
+                method,
+                path,
+                query_str,
+                body_str.len(),
+                auth_header,
+                body_str
+            );
+
+            stream.write_all(request.as_bytes()).await?;
+            stream.flush().await?;
+
+            let mut response = Vec::new();
+            stream.read_to_end(&mut response).await?;
+
+            let response_str = String::from_utf8_lossy(&response);
+            if let Some(pos) = response_str.find("\r\n\r\n") {
+                Ok(response[pos + 4..].to_vec())
+            } else {
+                Err(super::error::MihomoError::Config(
+                    "Invalid HTTP response".into(),
+                ))
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = (method, path, query, body, socket_path);
             Err(super::error::MihomoError::Config(
-                "Invalid HTTP response".into(),
+                "Unix domain sockets are not supported on this platform".into(),
             ))
         }
     }
@@ -254,37 +326,85 @@ impl MihomoClient {
                 let level = level.map(|s| s.to_string());
 
                 tokio::spawn(async move {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
+                    #[cfg(unix)]
+                    {
+                        use tokio::net::UnixStream;
+                        use tokio_tungstenite::client_async;
 
-                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                        let mut path = "/logs".to_string();
-                        if let Some(l) = level {
-                            path.push_str(&format!("?level={}", l));
-                        }
+                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                            let mut path = "/logs".to_string();
+                            if let Some(l) = level {
+                                path.push_str(&format!("?level={}", l));
+                            }
 
-                        let request = format!(
-                            "GET {} HTTP/1.1\r\n\
-                             Host: localhost\r\n\
-                             Upgrade: websocket\r\n\
-                             Connection: Upgrade\r\n\
-                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                             Sec-WebSocket-Version: 13\r\n\r\n",
-                            path
-                        );
+                            let request = format!(
+                                "GET {} HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n",
+                                path
+                            );
 
-                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                            let (_, mut read) = ws_stream.split();
-                            while let Some(msg) = read.next().await {
-                                match msg {
-                                    Ok(Message::Text(text)) => {
-                                        if tx.send(text.to_string()).is_err() {
-                                            break;
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if tx.send(text.to_string()).is_err() {
+                                                break;
+                                            }
                                         }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
                                     }
-                                    Ok(Message::Close(_)) => break,
-                                    Err(_) => break,
-                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    #[cfg(windows)]
+                    {
+                        use tokio::net::windows::named_pipe::ClientOptions;
+                        use tokio_tungstenite::client_async;
+
+                        let pipe_path = socket_path.to_string_lossy();
+                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                            pipe_path.to_string()
+                        } else {
+                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                        };
+
+                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
+                            let mut path = "/logs".to_string();
+                            if let Some(l) = level {
+                                path.push_str(&format!("?level={}", l));
+                            }
+
+                            let request = format!(
+                                "GET {} HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n",
+                                path
+                            );
+
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if tx.send(text.to_string()).is_err() {
+                                                break;
+                                            }
+                                        }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
@@ -340,33 +460,77 @@ impl MihomoClient {
                 let socket_path = socket_path.clone();
 
                 tokio::spawn(async move {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
+                    #[cfg(unix)]
+                    {
+                        use tokio::net::UnixStream;
+                        use tokio_tungstenite::client_async;
 
-                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                        let request = "GET /traffic HTTP/1.1\r\n\
-                             Host: localhost\r\n\
-                             Upgrade: websocket\r\n\
-                             Connection: Upgrade\r\n\
-                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                             Sec-WebSocket-Version: 13\r\n\r\n";
+                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                            let request = "GET /traffic HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n";
 
-                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                            let (_, mut read) = ws_stream.split();
-                            while let Some(msg) = read.next().await {
-                                match msg {
-                                    Ok(Message::Text(text)) => {
-                                        if let Ok(traffic) =
-                                            serde_json::from_str::<TrafficData>(text.as_ref())
-                                        {
-                                            if tx.send(traffic).is_err() {
-                                                break;
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if let Ok(traffic) =
+                                                serde_json::from_str::<TrafficData>(text.as_ref())
+                                            {
+                                                if tx.send(traffic).is_err() {
+                                                    break;
+                                                }
                                             }
                                         }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
                                     }
-                                    Ok(Message::Close(_)) => break,
-                                    Err(_) => break,
-                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    #[cfg(windows)]
+                    {
+                        use tokio::net::windows::named_pipe::ClientOptions;
+                        use tokio_tungstenite::client_async;
+
+                        let pipe_path = socket_path.to_string_lossy();
+                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                            pipe_path.to_string()
+                        } else {
+                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                        };
+
+                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
+                            let request = "GET /traffic HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n";
+
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if let Ok(traffic) =
+                                                serde_json::from_str::<TrafficData>(text.as_ref())
+                                            {
+                                                if tx.send(traffic).is_err() {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
@@ -451,35 +615,81 @@ impl MihomoClient {
                 let socket_path = socket_path.clone();
 
                 tokio::spawn(async move {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
+                    #[cfg(unix)]
+                    {
+                        use tokio::net::UnixStream;
+                        use tokio_tungstenite::client_async;
 
-                    if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                        let request = "GET /connections HTTP/1.1\r\n\
-                             Host: localhost\r\n\
-                             Upgrade: websocket\r\n\
-                             Connection: Upgrade\r\n\
-                             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                             Sec-WebSocket-Version: 13\r\n\r\n";
+                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
+                            let request = "GET /connections HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n";
 
-                        if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                            let (_, mut read) = ws_stream.split();
-                            while let Some(msg) = read.next().await {
-                                match msg {
-                                    Ok(Message::Text(text)) => {
-                                        if let Ok(snapshot) =
-                                            serde_json::from_str::<ConnectionSnapshot>(
-                                                text.as_ref(),
-                                            )
-                                        {
-                                            if tx.send(snapshot).is_err() {
-                                                break;
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if let Ok(snapshot) =
+                                                serde_json::from_str::<ConnectionSnapshot>(
+                                                    text.as_ref(),
+                                                )
+                                            {
+                                                if tx.send(snapshot).is_err() {
+                                                    break;
+                                                }
                                             }
                                         }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
                                     }
-                                    Ok(Message::Close(_)) => break,
-                                    Err(_) => break,
-                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    #[cfg(windows)]
+                    {
+                        use tokio::net::windows::named_pipe::ClientOptions;
+                        use tokio_tungstenite::client_async;
+
+                        let pipe_path = socket_path.to_string_lossy();
+                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                            pipe_path.to_string()
+                        } else {
+                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                        };
+
+                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
+                            let request = "GET /connections HTTP/1.1\r\n\
+                                 Host: localhost\r\n\
+                                 Upgrade: websocket\r\n\
+                                 Connection: Upgrade\r\n\
+                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                                 Sec-WebSocket-Version: 13\r\n\r\n";
+
+                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
+                                let (_, mut read) = ws_stream.split();
+                                while let Some(msg) = read.next().await {
+                                    match msg {
+                                        Ok(Message::Text(text)) => {
+                                            if let Ok(snapshot) =
+                                                serde_json::from_str::<ConnectionSnapshot>(
+                                                    text.as_ref(),
+                                                )
+                                            {
+                                                if tx.send(snapshot).is_err() {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        Ok(Message::Close(_)) => break,
+                                        Err(_) => break,
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
