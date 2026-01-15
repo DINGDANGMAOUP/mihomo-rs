@@ -22,11 +22,8 @@ pub struct MihomoClient {
 
 impl MihomoClient {
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
-        let transport = if base_url.starts_with('/') {
-            Transport::Unix {
-                socket_path: PathBuf::from(base_url),
-            }
-        } else if let Some(path) = base_url.strip_prefix("unix://") {
+        let transport = if base_url.starts_with('/') || base_url.starts_with("unix://") {
+            let path = base_url.strip_prefix("unix://").unwrap_or(base_url);
             Transport::Unix {
                 socket_path: PathBuf::from(path),
             }
@@ -55,7 +52,11 @@ impl MihomoClient {
                     "GET" => client.get(url),
                     "PUT" => client.put(url),
                     "DELETE" => client.delete(url),
-                    _ => return Err(super::error::MihomoError::Config("Unsupported method".into())),
+                    _ => {
+                        return Err(super::error::MihomoError::Config(
+                            "Unsupported method".into(),
+                        ))
+                    }
                 };
 
                 if let Some(q) = query {
@@ -467,7 +468,9 @@ impl MihomoClient {
                                 match msg {
                                     Ok(Message::Text(text)) => {
                                         if let Ok(snapshot) =
-                                            serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
+                                            serde_json::from_str::<ConnectionSnapshot>(
+                                                text.as_ref(),
+                                            )
                                         {
                                             if tx.send(snapshot).is_err() {
                                                 break;
@@ -660,7 +663,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_memory() {
-
         let mut server = Server::new_async().await;
         let mock = server
             .mock("GET", "/memory")
