@@ -35,7 +35,7 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tempfile = "3.24"
-mockito = "1.6"
+mockito = "1.7"
 
 [[bin]]
 name = "mihomo-rs"
