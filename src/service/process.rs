@@ -1,7 +1,7 @@
 use crate::core::{MihomoError, Result};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::fs;
 
 pub async fn spawn_daemon(binary: &Path, config: &Path) -> Result<u32> {
@@ -36,7 +36,7 @@ pub async fn spawn_daemon(binary: &Path, config: &Path) -> Result<u32> {
 
 pub fn kill_process(pid: u32) -> Result<()> {
     let mut system = System::new();
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
 
     let pid = Pid::from_u32(pid);
     if let Some(process) = system.process(pid) {
@@ -53,7 +53,7 @@ pub fn kill_process(pid: u32) -> Result<()> {
 
 pub fn is_process_alive(pid: u32) -> bool {
     let mut system = System::new();
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
     system.process(Pid::from_u32(pid)).is_some()
 }
 
@@ -84,4 +84,31 @@ pub async fn remove_pid_file(path: &Path) -> Result<()> {
         fs::remove_file(path).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_process_alive_with_invalid_pid() {
+        // Test with a PID that definitely doesn't exist
+        let result = is_process_alive(u32::MAX);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_is_process_alive_with_current_process() {
+        // Test with current process PID
+        let current_pid = std::process::id();
+        let result = is_process_alive(current_pid);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_kill_process_with_invalid_pid() {
+        // Test killing a non-existent process (should succeed without error)
+        let result = kill_process(u32::MAX);
+        assert!(result.is_ok());
+    }
 }
