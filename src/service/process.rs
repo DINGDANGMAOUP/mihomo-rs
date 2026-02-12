@@ -1,7 +1,7 @@
 use crate::core::{MihomoError, Result};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::fs;
 
 pub async fn spawn_daemon(binary: &Path, config: &Path) -> Result<u32> {
@@ -36,7 +36,7 @@ pub async fn spawn_daemon(binary: &Path, config: &Path) -> Result<u32> {
 
 pub fn kill_process(pid: u32) -> Result<()> {
     let mut system = System::new();
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
 
     let pid = Pid::from_u32(pid);
     if let Some(process) = system.process(pid) {
@@ -53,7 +53,7 @@ pub fn kill_process(pid: u32) -> Result<()> {
 
 pub fn is_process_alive(pid: u32) -> bool {
     let mut system = System::new();
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
     system.process(Pid::from_u32(pid)).is_some()
 }
 
