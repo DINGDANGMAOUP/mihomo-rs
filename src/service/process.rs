@@ -85,3 +85,30 @@ pub async fn remove_pid_file(path: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_process_alive_with_invalid_pid() {
+        // Test with a PID that definitely doesn't exist
+        let result = is_process_alive(u32::MAX);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_is_process_alive_with_current_process() {
+        // Test with current process PID
+        let current_pid = std::process::id();
+        let result = is_process_alive(current_pid);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_kill_process_with_invalid_pid() {
+        // Test killing a non-existent process (should succeed without error)
+        let result = kill_process(u32::MAX);
+        assert!(result.is_ok());
+    }
+}
