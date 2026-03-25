@@ -66,6 +66,9 @@ cargo fmt --check
 # Run clippy
 cargo clippy -- -D warnings
 
+# Run coverage gate (requires cargo-tarpaulin)
+COVERAGE_MIN=80 ./scripts/coverage.sh
+
 # Build examples
 cargo build --examples
 ```
@@ -150,6 +153,7 @@ Users need to run multiple isolated instances or use custom storage locations
 - [ ] `cargo fmt` passes
 - [ ] `cargo clippy` passes
 - [ ] `cargo test` passes
+- [ ] Coverage gate passes (`COVERAGE_MIN=80 ./scripts/coverage.sh`)
 - [ ] Commit messages follow conventions
 
 ## Code Style

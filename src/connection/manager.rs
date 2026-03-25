@@ -33,11 +33,12 @@ impl ConnectionManager {
             .into_iter()
             .filter(|c| c.metadata.host.contains(host))
             .collect();
-        log::debug!(
+        let message = format!(
             "Filtered {} connections matching host '{}'",
             filtered.len(),
             host
         );
+        log::debug!("{message}");
         Ok(filtered)
     }
 
@@ -47,11 +48,12 @@ impl ConnectionManager {
             .into_iter()
             .filter(|c| c.metadata.process_path.contains(process))
             .collect();
-        log::debug!(
+        let message = format!(
             "Filtered {} connections matching process '{}'",
             filtered.len(),
             process
         );
+        log::debug!("{message}");
         Ok(filtered)
     }
 
@@ -61,11 +63,12 @@ impl ConnectionManager {
             .into_iter()
             .filter(|c| c.rule.contains(rule))
             .collect();
-        log::debug!(
+        let message = format!(
             "Filtered {} connections matching rule '{}'",
             filtered.len(),
             rule
         );
+        log::debug!("{message}");
         Ok(filtered)
     }
 

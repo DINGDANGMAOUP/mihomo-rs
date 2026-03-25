@@ -22,6 +22,7 @@ Thumbs.db
 
 # 测试输出
 /coverage
+/cobertura.xml
 
 # 本地配置
 .env

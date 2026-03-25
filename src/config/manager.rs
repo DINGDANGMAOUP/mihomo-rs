@@ -5,6 +5,21 @@ use crate::core::{
 use std::path::PathBuf;
 use tokio::fs;
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(test)]
+static FORCE_NO_AVAILABLE_PORT: AtomicBool = AtomicBool::new(false);
+
+fn find_controller_port(start: u16) -> Option<u16> {
+    #[cfg(test)]
+    if FORCE_NO_AVAILABLE_PORT.load(Ordering::SeqCst) {
+        return None;
+    }
+
+    find_available_port(start)
+}
+
 pub struct ConfigManager {
     config_dir: PathBuf,
     settings_file: PathBuf,
@@ -105,7 +120,9 @@ impl ConfigManager {
             )));
         }
 
-        fs::create_dir_all(self.settings_file.parent().unwrap()).await?;
+        if let Some(parent) = self.settings_file.parent() {
+            fs::create_dir_all(parent).await?;
+        }
 
         let mut config = if self.settings_file.exists() {
             let content = fs::read_to_string(&self.settings_file).await?;
@@ -164,7 +181,7 @@ impl ConfigManager {
         if !path.exists() {
             log::info!("Default config '{}' not found, creating...", profile);
 
-            let port = find_available_port(9090).ok_or_else(|| {
+            let port = find_controller_port(9090).ok_or_else(|| {
                 MihomoError::Config("No available ports found in range 9090-9190".to_string())
             })?;
 
@@ -255,7 +272,7 @@ external-controller: 127.0.0.1:{}
         };
 
         if needs_update {
-            let port = find_available_port(9090).ok_or_else(|| {
+            let port = find_controller_port(9090).ok_or_else(|| {
                 MihomoError::Config("No available ports found in range 9090-9190".to_string())
             })?;
 
@@ -276,5 +293,46 @@ external-controller: 127.0.0.1:{}
         } else {
             self.get_external_controller().await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use tokio::fs;
+
+    #[tokio::test]
+    async fn ensure_default_config_errors_when_no_port_is_available() {
+        let temp = tempdir().unwrap();
+        let cm = ConfigManager::with_home(temp.path().to_path_buf()).unwrap();
+
+        FORCE_NO_AVAILABLE_PORT.store(true, Ordering::SeqCst);
+        let result = cm.ensure_default_config().await;
+        FORCE_NO_AVAILABLE_PORT.store(false, Ordering::SeqCst);
+
+        assert!(matches!(result, Err(MihomoError::Config(_))));
+    }
+
+    #[tokio::test]
+    async fn ensure_external_controller_errors_when_no_port_is_available() {
+        let temp = tempdir().unwrap();
+        let cm = ConfigManager::with_home(temp.path().to_path_buf()).unwrap();
+
+        fs::create_dir_all(temp.path().join("configs"))
+            .await
+            .unwrap();
+        fs::write(
+            temp.path().join("configs").join("default.yaml"),
+            "port: 7890\nexternal-controller: invalid\n",
+        )
+        .await
+        .unwrap();
+
+        FORCE_NO_AVAILABLE_PORT.store(true, Ordering::SeqCst);
+        let result = cm.ensure_external_controller().await;
+        FORCE_NO_AVAILABLE_PORT.store(false, Ordering::SeqCst);
+
+        assert!(matches!(result, Err(MihomoError::Config(_))));
     }
 }

@@ -3,6 +3,8 @@
 use mihomo_rs::connection::ConnectionManager;
 use mihomo_rs::core::MihomoClient;
 use mockito::Server;
+use tokio::net::TcpListener;
+use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 
 #[tokio::test]
 async fn test_connection_manager_list() {
@@ -629,4 +631,33 @@ async fn test_connection_manager_filter_empty_results() {
     mock.assert_async().await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn test_connection_manager_stream() {
+    use futures_util::{SinkExt, StreamExt};
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let ws = accept_async(stream).await.unwrap();
+        let (mut tx, _) = ws.split();
+        tx.send(WsMessage::Text(
+            r#"{"connections":[],"downloadTotal":33,"uploadTotal":44}"#.into(),
+        ))
+        .await
+        .ok();
+    });
+
+    let client = MihomoClient::new(&format!("http://{}", addr), None).unwrap();
+    let manager = ConnectionManager::new(client);
+    let mut rx = manager.stream().await.unwrap();
+    let snap = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snap.download_total, 33);
+    assert_eq!(snap.upload_total, 44);
 }

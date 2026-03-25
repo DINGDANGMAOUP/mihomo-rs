@@ -15,13 +15,23 @@ impl Downloader {
     }
 
     pub async fn download_version(&self, version: &str, dest: &Path) -> Result<()> {
+        self.download_version_with_base_url(version, dest, &download_base_url())
+            .await
+    }
+
+    pub(crate) async fn download_version_with_base_url(
+        &self,
+        version: &str,
+        dest: &Path,
+        base_url: &str,
+    ) -> Result<()> {
         let platform = Self::detect_platform();
         let os_name = Self::get_os_name();
         let extension = Self::get_file_extension();
         let filename = format!("mihomo-{}-{}-{}.{}", os_name, platform, version, extension);
         let url = format!(
-            "https://github.com/MetaCubeX/mihomo/releases/download/{}/{}",
-            version, filename
+            "{}/MetaCubeX/mihomo/releases/download/{}/{}",
+            base_url, version, filename
         );
 
         let resp = self
@@ -41,12 +51,7 @@ impl Downloader {
 
         let bytes = resp.bytes().await?;
 
-        // Decompress based on file extension
-        let decompressed = if extension == "zip" {
-            Self::decompress_zip(&bytes)?
-        } else {
-            Self::decompress_gz(&bytes)?
-        };
+        let decompressed = Self::decompress_by_extension(extension, &bytes)?;
 
         let mut file = fs::File::create(dest).await?;
         file.write_all(&decompressed).await?;
@@ -63,7 +68,11 @@ impl Downloader {
     }
 
     fn get_os_name() -> &'static str {
-        match std::env::consts::OS {
+        Self::map_os_name(std::env::consts::OS)
+    }
+
+    fn map_os_name(os: &str) -> &'static str {
+        match os {
             "linux" => "linux",
             "macos" => "darwin",
             "windows" => "windows",
@@ -72,20 +81,34 @@ impl Downloader {
     }
 
     fn detect_platform() -> String {
-        let arch = std::env::consts::ARCH;
+        Self::map_platform(std::env::consts::ARCH).to_string()
+    }
+
+    fn map_platform(arch: &str) -> &'static str {
         match arch {
             "x86_64" => "amd64",
             "aarch64" => "arm64",
             "arm" => "armv7",
             _ => "amd64",
         }
-        .to_string()
     }
 
     fn get_file_extension() -> &'static str {
-        match std::env::consts::OS {
+        Self::file_extension_for_os(std::env::consts::OS)
+    }
+
+    fn file_extension_for_os(os: &str) -> &'static str {
+        match os {
             "windows" => "zip",
             _ => "gz",
+        }
+    }
+
+    fn decompress_by_extension(extension: &str, bytes: &[u8]) -> Result<Vec<u8>> {
+        if extension == "zip" {
+            Self::decompress_zip(bytes)
+        } else {
+            Self::decompress_gz(bytes)
         }
     }
 
@@ -135,9 +158,20 @@ impl Default for Downloader {
     }
 }
 
+fn download_base_url() -> String {
+    std::env::var("MIHOMO_DOWNLOAD_BASE_URL").unwrap_or_else(|_| "https://github.com".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockito::Server;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn test_get_os_name() {
@@ -170,6 +204,22 @@ mod tests {
             "Extension should be zip or gz, got: {}",
             extension
         );
+    }
+
+    #[test]
+    fn test_map_os_name_unknown_defaults_to_linux() {
+        assert_eq!(Downloader::map_os_name("weird-os"), "linux");
+    }
+
+    #[test]
+    fn test_map_platform_unknown_defaults_to_amd64() {
+        assert_eq!(Downloader::map_platform("mips"), "amd64");
+    }
+
+    #[test]
+    fn test_file_extension_for_windows_and_unknown() {
+        assert_eq!(Downloader::file_extension_for_os("windows"), "zip");
+        assert_eq!(Downloader::file_extension_for_os("unknown"), "gz");
     }
 
     #[test]
@@ -242,6 +292,28 @@ mod tests {
     }
 
     #[test]
+    fn test_decompress_by_extension_zip_branch() {
+        use std::io::{Cursor, Write};
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
+        let mut zip_buffer = Cursor::new(Vec::new());
+        {
+            let mut zip = ZipWriter::new(&mut zip_buffer);
+            let options = SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .unix_permissions(0o755);
+            zip.start_file("mihomo", options).unwrap();
+            zip.write_all(b"zip-binary").unwrap();
+            zip.finish().unwrap();
+        }
+
+        let decompressed = Downloader::decompress_by_extension("zip", &zip_buffer.into_inner())
+            .expect("zip branch should decode");
+        assert_eq!(decompressed, b"zip-binary");
+    }
+
+    #[test]
     fn test_decompress_zip_with_multiple_files_fails() {
         use std::io::{Cursor, Write};
         use zip::write::SimpleFileOptions;
@@ -304,5 +376,125 @@ mod tests {
         assert!(filename.starts_with("mihomo-"));
         assert!(filename.contains(version));
         assert!(filename.ends_with(".zip") || filename.ends_with(".gz"));
+    }
+
+    #[tokio::test]
+    async fn test_download_version_with_base_url_http_error() {
+        let mut server = Server::new_async().await;
+        let version = "v1.19.17";
+        let platform = Downloader::detect_platform();
+        let os_name = Downloader::get_os_name();
+        let extension = Downloader::get_file_extension();
+        let filename = format!("mihomo-{}-{}-{}.{}", os_name, platform, version, extension);
+        let path = format!(
+            "/MetaCubeX/mihomo/releases/download/{}/{}",
+            version, filename
+        );
+
+        let mock = server
+            .mock("GET", path.as_str())
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("mihomo");
+        let downloader = Downloader::new();
+        let result = downloader
+            .download_version_with_base_url(version, &dest, &server.url())
+            .await;
+
+        mock.assert_async().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_download_version_public_wrapper_uses_env_base_url() {
+        let _guard = env_lock().lock().expect("env lock");
+        let mut server = Server::new_async().await;
+        let version = "v1.19.18";
+        let platform = Downloader::detect_platform();
+        let os_name = Downloader::get_os_name();
+        let extension = Downloader::get_file_extension();
+        let filename = format!("mihomo-{}-{}-{}.{}", os_name, platform, version, extension);
+        let path = format!(
+            "/MetaCubeX/mihomo/releases/download/{}/{}",
+            version, filename
+        );
+
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"wrapper-binary").unwrap();
+        let gz = encoder.finish().unwrap();
+
+        let mock = server
+            .mock("GET", path.as_str())
+            .with_status(200)
+            .with_body(gz)
+            .create_async()
+            .await;
+
+        let old = std::env::var("MIHOMO_DOWNLOAD_BASE_URL").ok();
+        // SAFETY: env updates are serialized in this module via env_lock.
+        unsafe { std::env::set_var("MIHOMO_DOWNLOAD_BASE_URL", server.url()) };
+
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("mihomo");
+        let downloader = Downloader::default();
+        downloader.download_version(version, &dest).await.unwrap();
+
+        mock.assert_async().await;
+        assert!(dest.exists());
+
+        if let Some(prev) = old {
+            // SAFETY: env updates are serialized in this module via env_lock.
+            unsafe { std::env::set_var("MIHOMO_DOWNLOAD_BASE_URL", prev) };
+        } else {
+            // SAFETY: env updates are serialized in this module via env_lock.
+            unsafe { std::env::remove_var("MIHOMO_DOWNLOAD_BASE_URL") };
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
+    async fn test_download_version_with_base_url_gz_success() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"fake-binary").unwrap();
+        let gz = encoder.finish().unwrap();
+
+        let mut server = Server::new_async().await;
+        let version = "v1.19.17";
+        let platform = Downloader::detect_platform();
+        let os_name = Downloader::get_os_name();
+        let filename = format!("mihomo-{}-{}-{}.gz", os_name, platform, version);
+        let path = format!(
+            "/MetaCubeX/mihomo/releases/download/{}/{}",
+            version, filename
+        );
+
+        let mock = server
+            .mock("GET", path.as_str())
+            .with_status(200)
+            .with_body(gz)
+            .create_async()
+            .await;
+
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("mihomo");
+        let downloader = Downloader::new();
+        downloader
+            .download_version_with_base_url(version, &dest, &server.url())
+            .await
+            .unwrap();
+
+        mock.assert_async().await;
+        assert!(dest.exists());
     }
 }

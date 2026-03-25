@@ -3,6 +3,12 @@ mod common;
 use common::{get_temp_home_path, setup_temp_home};
 use mihomo_rs::{Result, VersionManager};
 
+fn should_run_real_download_tests() -> bool {
+    std::env::var("MIHOMO_RS_RUN_REAL_DOWNLOAD_TESTS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 #[tokio::test]
 async fn test_download_url_format() -> Result<()> {
     let temp_dir = setup_temp_home();
@@ -138,6 +144,11 @@ fn test_os_detection_coverage() {
 
 #[tokio::test]
 async fn test_real_download_linux() -> Result<()> {
+    if !should_run_real_download_tests() {
+        println!("⊘ Skipping: set MIHOMO_RS_RUN_REAL_DOWNLOAD_TESTS=1 to enable");
+        return Ok(());
+    }
+
     if cfg!(not(target_os = "linux")) {
         println!("⊘ Skipping: not running on Linux");
         return Ok(());
@@ -168,6 +179,11 @@ async fn test_real_download_linux() -> Result<()> {
 
 #[tokio::test]
 async fn test_real_download_macos() -> Result<()> {
+    if !should_run_real_download_tests() {
+        println!("⊘ Skipping: set MIHOMO_RS_RUN_REAL_DOWNLOAD_TESTS=1 to enable");
+        return Ok(());
+    }
+
     if cfg!(not(target_os = "macos")) {
         println!("⊘ Skipping: not running on macOS");
         return Ok(());
@@ -196,6 +212,11 @@ async fn test_real_download_macos() -> Result<()> {
 
 #[tokio::test]
 async fn test_real_download_windows() -> Result<()> {
+    if !should_run_real_download_tests() {
+        println!("⊘ Skipping: set MIHOMO_RS_RUN_REAL_DOWNLOAD_TESTS=1 to enable");
+        return Ok(());
+    }
+
     if cfg!(not(target_os = "windows")) {
         println!("⊘ Skipping: not running on Windows");
         return Ok(());
@@ -224,6 +245,11 @@ async fn test_real_download_windows() -> Result<()> {
 
 #[tokio::test]
 async fn test_real_download_invalid_version() -> Result<()> {
+    if !should_run_real_download_tests() {
+        println!("⊘ Skipping: set MIHOMO_RS_RUN_REAL_DOWNLOAD_TESTS=1 to enable");
+        return Ok(());
+    }
+
     let temp_dir = setup_temp_home();
     let home = get_temp_home_path(&temp_dir);
     let vm = VersionManager::with_home(home)?;

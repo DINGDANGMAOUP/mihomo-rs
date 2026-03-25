@@ -10,6 +10,8 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_MIN: 80
     steps:
       - uses: actions/checkout@v6
 
@@ -20,7 +22,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --exclude-files "src/main.rs" --exclude-files "src/cli/*" --out xml --fail-under $COVERAGE_MIN
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
