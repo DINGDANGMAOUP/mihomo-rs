@@ -668,11 +668,11 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
     #[cfg(any(unix, windows))]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[cfg(windows)]
+    use tokio::net::windows::named_pipe::ServerOptions;
     use tokio::net::TcpListener;
     #[cfg(unix)]
     use tokio::net::UnixListener;
-    #[cfg(windows)]
-    use tokio::net::windows::named_pipe::ServerOptions;
     use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 
     #[test]
