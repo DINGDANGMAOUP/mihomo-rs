@@ -5,258 +5,153 @@
 [![Crates.io](https://img.shields.io/crates/v/mihomo-rs.svg)](https://crates.io/crates/mihomo-rs)
 [![Documentation](https://docs.rs/mihomo-rs/badge.svg)](https://docs.rs/mihomo-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DINGDANGMAOUP/mihomo-rs)
 
-[Examples](./examples/) | [API Docs](https://docs.rs/mihomo-rs)
+[示例](./examples/) | [API 文档](https://docs.rs/mihomo-rs)
 
 [English](README.md) | 简体中文
 
-
-一个用于 [mihomo](https://github.com/MetaCubeX/mihomo) 代理管理的 Rust SDK 和命令行工具,提供服务生命周期管理、配置处理和实时监控功能。
+面向 [mihomo](https://github.com/MetaCubeX/mihomo) 的 Rust SDK 与 CLI：覆盖版本管理、配置管理、服务生命周期、代理操作和实时连接/流量监控。
 
 </div>
 
----
+## 项目能力
 
-## 主要特性
-
-- 🔧 **版本管理** - 安装、更新和切换 mihomo 版本(类似 rustup 的体验)
-- ⚙️ **配置管理** - 管理多个配置文件并进行验证
-- 🚀 **服务生命周期** - 启动、停止、重启 mihomo 服务,支持 PID 管理
-- 🔄 **代理操作** - 列出、切换和测试代理节点及组
-- 📊 **实时监控** - 流式传输日志、流量统计和内存使用情况
-- 🔌 **连接管理** - 实时监控、过滤和关闭活动连接
-- 📦 **SDK 库** - 可作为库在 Rust 应用程序中使用
-- 🖥️ **CLI 工具** - 命令行界面,便于管理
+- 从 GitHub Release 安装/切换 mihomo 版本（`stable`、`beta`、`nightly` 或显式版本号）。
+- 管理本地配置 profile（默认在 `~/.config/mihomo-rs`，可由 `$MIHOMO_HOME` 覆盖）。
+- 启动/停止/重启 mihomo，并维护 PID 状态。
+- 查询代理组/节点、切换代理、测试延迟。
+- 查询/过滤/关闭连接。
+- 通过 WebSocket 流式读取日志、流量和连接快照。
 
 ## 安装
 
-### 作为库使用
+```bash
+cargo install mihomo-rs
+```
 
-添加到 `Cargo.toml`:
+作为库使用：
 
 ```toml
 [dependencies]
 mihomo-rs = "*"
 ```
 
-### 作为 CLI 工具
+## 快速开始（CLI）
 
 ```bash
-cargo install mihomo-rs
+# 1) 安装并设置版本
+mihomo-rs install stable
+mihomo-rs list
+mihomo-rs default v1.19.17
+
+# 2) 启动服务（缺省配置会自动创建）
+mihomo-rs start
+mihomo-rs status
+
+# 3) 代理操作
+mihomo-rs proxy groups
+mihomo-rs proxy switch GLOBAL "Proxy-A"
+
+# 4) 监控
+mihomo-rs logs --level info
+mihomo-rs traffic
+mihomo-rs connection stats
 ```
 
-## 快速开始
+完整命令请执行 `mihomo-rs --help`。
 
-### SDK 使用示例
+## 快速开始（SDK）
 
 ```rust
-use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, ConnectionManager, Result};
+use mihomo_rs::{Channel, ConfigManager, MihomoClient, ProxyManager, ServiceManager, VersionManager, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 1. 安装 mihomo
     let vm = VersionManager::new()?;
     vm.install_channel(Channel::Stable).await?;
 
-    // 2. 设置配置
     let cm = ConfigManager::new()?;
     cm.ensure_default_config().await?;
     let controller_url = cm.ensure_external_controller().await?;
 
-    // 3. 启动服务
     let binary = vm.get_binary_path(None).await?;
     let config = cm.get_current_path().await?;
     let sm = ServiceManager::new(binary, config);
     sm.start().await?;
 
-    // 4. 使用代理管理器
     let client = MihomoClient::new(&controller_url, None)?;
-    let pm = ProxyManager::new(client.clone());
-
-    // 列出代理组
+    let pm = ProxyManager::new(client);
     let groups = pm.list_groups().await?;
-    for group in groups {
-        println!("{}: {} ({})", group.name, group.now, group.group_type);
-    }
 
-    // 切换代理
-    pm.switch("GLOBAL", "proxy-name").await?;
-
-    // 5. 监控连接
-    let conn_mgr = ConnectionManager::new(client.clone());
-
-    // 列出活动连接
-    let connections = conn_mgr.list().await?;
-    println!("活动连接: {}", connections.len());
-
-    // 按主机过滤连接
-    let filtered = conn_mgr.filter_by_host("example.com").await?;
-
-    // 关闭特定连接
-    if let Some(conn) = connections.first() {
-        conn_mgr.close(&conn.id).await?;
-    }
-
-    // 6. 流式传输实时流量
-    let mut traffic_rx = client.stream_traffic().await?;
-    while let Some(traffic) = traffic_rx.recv().await {
-        println!("上传: {} KB/s, 下载: {} KB/s",
-            traffic.up / 1024, traffic.down / 1024);
-    }
-
+    println!("groups: {}", groups.len());
     Ok(())
 }
 ```
 
-### CLI 使用
+## 渐进式示例
 
-```bash
-# 安装 mihomo
-mihomo-rs install stable
+`examples/` 按阶段组织：
 
-# 启动服务
-mihomo-rs start
+1. `01_bootstrap.rs`：隔离 home + 初始化管理器
+2. `02_config_profiles.rs`：配置保存/列举/切换
+3. `03_version_inventory.rs`：版本清单与默认版本读取
+4. `04_service_lifecycle_dry_run.rs`：服务生命周期 dry-run
+5. `05_proxy_queries.rs`：代理查询（在线）
+6. `06_connection_queries.rs`：连接查询与过滤（在线）
+7. `07_streaming.rs`：日志与流量流式读取（在线）
+8. `08_complete_workflow.rs`：端到端工作流模板
 
-# 列出代理
-mihomo-rs proxy list
-
-# 切换代理
-mihomo-rs proxy switch GLOBAL proxy-name
-
-# 流式传输日志(带级别过滤)
-mihomo-rs logs --level info
-
-# 流式传输流量统计
-mihomo-rs traffic
-
-# 显示内存使用
-mihomo-rs memory
-
-# 列出活动连接
-mihomo-rs connection list
-
-# 显示连接统计
-mihomo-rs connection stats
-
-# 实时流式传输连接
-mihomo-rs connection stream
-
-# 关闭特定连接
-mihomo-rs connection close <connection-id>
-
-# 关闭所有连接
-mihomo-rs connection close-all --force
-```
-
-## 示例
-
-[examples/](./examples/) 目录采用 8 段渐进式示例:
-
-- `01_bootstrap.rs` - 使用隔离 home 初始化管理器
-- `02_config_profiles.rs` - 配置保存、列举、切换
-- `03_version_inventory.rs` - 版本清单与默认版本读取
-- `04_service_lifecycle_dry_run.rs` - 服务管理器构造与状态检查
-- `05_proxy_queries.rs` - 代理组与代理节点查询(在线)
-- `06_connection_queries.rs` - 连接查询/过滤/统计(在线)
-- `07_streaming.rs` - 日志与流量流式读取入口(在线)
-- `08_complete_workflow.rs` - 端到端流程模板
-
-运行示例:
 ```bash
 cargo run --example 01_bootstrap
 ```
 
-查看 [examples/README.md](./examples/README.md) 获取详细文档。
+详情见 [examples/README.md](./examples/README.md)。
 
-## API 概述
+## 命令总览
 
-### 主要模块
+- 版本：`install`、`update`、`default`、`list`、`list-remote`、`uninstall`
+- 配置：`config list|use|show|delete`
+- 服务：`start`、`stop`、`restart`、`status`
+- 代理：`proxy list|groups|switch|test|current`
+- 监控：`logs`、`traffic`、`memory`
+- 连接：`connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
 
-| 模块 | 说明 |
-|------|------|
-| `MihomoClient` | mihomo API 的 HTTP/WebSocket 客户端 |
-| `VersionManager` | 安装和管理 mihomo 版本 |
-| `ConfigManager` | 管理配置文件 |
-| `ServiceManager` | 控制服务生命周期 |
-| `ProxyManager` | 高级代理操作 |
-| `ConnectionManager` | 监控和管理活动连接 |
+## 数据目录
 
-### 主要类型
+默认路径：`~/.config/mihomo-rs/`
 
-| 类型 | 说明 |
-|------|------|
-| `Version` | mihomo 版本信息 |
-| `ProxyNode` | 单个代理节点 |
-| `ProxyGroup` | 代理组(Selector、URLTest 等) |
-| `TrafficData` | 上传/下载统计 |
-| `MemoryData` | 内存使用信息 |
-| `Channel` | 发布渠道(Stable/Beta/Nightly) |
-| `Connection` | 活动连接信息 |
-| `ConnectionSnapshot` | 实时连接快照 |
-| `ConnectionMetadata` | 连接元数据(源、目标、进程等) |
-
-## 配置
-
-### 默认位置
-
-mihomo-rs 将数据存储在 `~/.config/mihomo-rs/`(或 `$MIHOMO_HOME`):
-
-```
+```text
 ~/.config/mihomo-rs/
-├── versions/           # 已安装的 mihomo 二进制文件
-├── configs/            # 配置文件
-├── config.toml         # mihomo-rs 设置
-└── mihomo.pid          # 服务 PID 文件
+├── versions/      # 已安装内核
+├── configs/       # profile yaml
+├── config.toml    # 默认版本与默认 profile
+└── mihomo.pid     # PID 记录
 ```
 
-### 自定义主目录
-
-通过环境变量设置:
+自定义目录：
 
 ```bash
 export MIHOMO_HOME=/custom/path
 ```
 
-或通过代码:
-
-```rust
-let home = PathBuf::from("/custom/path");
-let vm = VersionManager::with_home(home.clone())?;
-```
-
 ## 开发
 
-### 从源码构建
-
 ```bash
-git clone https://github.com/DINGDANGMAOUP/mihomo-rs
+git clone https://github.com/DINGDANGMAOUP/mihomo-rs.git
 cd mihomo-rs
-cargo build --release
-```
-
-### 运行测试
-
-```bash
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-### 覆盖率门禁
+## 安全
 
-```bash
-cargo install cargo-llvm-cov --locked
-rustup component add llvm-tools-preview
-cargo llvm-cov --workspace --all-features --tests --summary-only --fail-under-lines 96
-```
+见 [SECURITY.md](./SECURITY.md)。
 
 ## 贡献
 
-欢迎贡献!请参阅 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解指南。
+见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 许可证
 
-MIT 许可证 - 详见 [LICENSE](./LICENSE)
-
-## 相关项目
-
-- [mihomo](https://github.com/MetaCubeX/mihomo) - Mihomo
+MIT，见 [LICENSE](./LICENSE)。

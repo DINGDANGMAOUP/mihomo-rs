@@ -1,299 +1,109 @@
 # Contributing to mihomo-rs
 
-Thank you for your interest in contributing to mihomo-rs! This document provides guidelines and instructions for contributing.
+This project follows an agile, incremental workflow: small PRs, quick feedback, and verifiable steps.
 
-## Code of Conduct
+## Principles
 
-Be respectful and constructive in all interactions.
+- Keep changes small and focused.
+- Prefer iterative delivery over large one-shot refactors.
+- Ensure each step is buildable and testable.
+- Update docs/examples together with behavior changes.
 
-## Getting Started
-
-### Prerequisites
-
-- Rust 1.70 or later
-- Git
-- A GitHub account
-
-### Setup Development Environment
+## Development Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/DINGDANGMAOUP/mihomo-rs.git
 cd mihomo-rs
-
-# Build the project
 cargo build
-
-# Run tests
 cargo test
-
-# Run examples
-cargo run --example list_proxies
 ```
 
-## Development Workflow
+## Agile Contribution Flow
 
-### 1. Create a Branch
+1. Define one sprint-sized goal (single concern).
+2. Split it into 1-3 incremental commits.
+3. Validate after each increment (`fmt`, `clippy`, targeted tests).
+4. Open PR early if design/API direction needs feedback.
+
+Recommended branch names:
+
+- `feat/<topic>`
+- `fix/<topic>`
+- `refactor/<topic>`
+- `docs/<topic>`
+- `test/<topic>`
+
+## Definition of Done (Per PR)
+
+A PR is considered done when all are true:
+
+- Code compiles.
+- Tests for changed behavior exist or are updated.
+- `cargo fmt --check` passes.
+- `cargo clippy --all-targets --all-features -- -D warnings` passes.
+- `cargo test` passes.
+- User-facing changes are reflected in `README.md` and `README_CN.md` if relevant.
+
+## Commit Style
+
+Use Conventional Commits:
+
+- `feat: ...`
+- `fix: ...`
+- `refactor: ...`
+- `test: ...`
+- `docs: ...`
+- `chore: ...`
+
+Examples:
+
+- `feat: add close-by-process command for connection management`
+- `fix: validate profile names in config subcommands`
+- `docs: refresh progressive examples section`
+
+## PR Expectations
+
+Please include:
+
+- What changed.
+- Why it changed.
+- How to verify.
+- Any compatibility or migration notes.
+
+Keep PRs reviewable:
+
+- Prefer < 400 lines when possible.
+- Separate refactor and behavior changes into different commits.
+- Avoid mixing unrelated features.
+
+## Testing Guidance
+
+Use the smallest meaningful test scope first, then full regression:
 
 ```bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/your-bug-fix
-```
+# unit/integration quick loop
+cargo test <name_fragment>
 
-### 2. Make Changes
-
-- Write clear, concise code
-- Follow Rust conventions and idioms
-- Add tests for new functionality
-- Update documentation as needed
-
-### 3. Test Your Changes
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test
-cargo test test_name
-
-# Run with verbose output
-cargo test -- --nocapture
-
-# Check formatting
+# full project checks
 cargo fmt --check
-
-# Run clippy
-cargo clippy -- -D warnings
-
-# Build examples
-cargo build --examples
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
 ```
 
-### 4. Commit Your Changes
+If adding API behavior, also add or update an example in `examples/` when practical.
 
-Use conventional commit messages:
+## Documentation Policy
 
-```bash
-# Feature
-git commit -m "feat: add proxy delay testing"
+When changing command behavior, public APIs, or workflow:
 
-# Bug fix
-git commit -m "fix: resolve connection timeout issue"
+- Update `README.md` (English).
+- Update `README_CN.md` (Chinese).
+- Keep examples aligned with the actual CLI/API behavior.
 
-# Documentation
-git commit -m "docs: update README with examples"
+## Security
 
-# Refactor
-git commit -m "refactor: simplify config manager"
+Do not disclose vulnerabilities in public issues. Follow [SECURITY.md](./SECURITY.md).
 
-# Test
-git commit -m "test: add integration tests for proxy switching"
+## Questions
 
-# Chore
-git commit -m "chore: update dependencies"
-```
-
-### 5. Push and Create Pull Request
-
-```bash
-git push origin feature/your-feature-name
-```
-
-Then create a Pull Request on GitHub.
-
-## Pull Request Guidelines
-
-### PR Title
-
-Use conventional commit format:
-- `feat: description` - New feature
-- `fix: description` - Bug fix
-- `docs: description` - Documentation
-- `refactor: description` - Code refactoring
-- `test: description` - Tests
-- `chore: description` - Maintenance
-
-### PR Description
-
-Include:
-- **What**: What changes were made
-- **Why**: Why these changes are needed
-- **How**: How the changes work
-- **Testing**: How you tested the changes
-
-Example:
-```markdown
-## What
-Add support for custom home directory via MIHOMO_HOME environment variable
-
-## Why
-Users need to run multiple isolated instances or use custom storage locations
-
-## How
-- Added `get_home_dir()` helper function
-- Updated all managers to use the helper
-- Added `with_home()` constructors for programmatic usage
-
-## Testing
-- Added examples/custom_home_sdk.rs
-- Tested with multiple isolated instances
-- All existing tests pass
-```
-
-### PR Checklist
-
-- [ ] Code follows Rust conventions
-- [ ] Tests added/updated
-- [ ] Documentation updated
-- [ ] Examples added (if applicable)
-- [ ] `cargo fmt` passes
-- [ ] `cargo clippy` passes
-- [ ] `cargo test` passes
-- [ ] Commit messages follow conventions
-
-## Code Style
-
-### Formatting
-
-Use `rustfmt` with default settings:
-
-```bash
-cargo fmt
-```
-
-### Linting
-
-Fix all clippy warnings:
-
-```bash
-cargo clippy --fix
-```
-
-### Naming Conventions
-
-- **Functions**: `snake_case`
-- **Types**: `PascalCase`
-- **Constants**: `SCREAMING_SNAKE_CASE`
-- **Modules**: `snake_case`
-
-### Documentation
-
-Add doc comments for public APIs:
-
-```rust
-/// Get the external controller URL from config
-///
-/// # Returns
-///
-/// Returns the URL as a String (e.g., "http://127.0.0.1:9090")
-///
-/// # Errors
-///
-/// Returns error if config file cannot be read or parsed
-pub async fn get_external_controller(&self) -> Result<String> {
-    // ...
-}
-```
-
-## Testing
-
-### Unit Tests
-
-Add tests in the same file:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_url() {
-        // Test implementation
-    }
-}
-```
-
-### Integration Tests
-
-Add tests in `tests/` directory:
-
-```rust
-// tests/integration_test.rs
-use mihomo_rs::*;
-
-#[tokio::test]
-async fn test_version_manager() {
-    // Test implementation
-}
-```
-
-### Examples
-
-Add examples in `examples/` directory:
-
-```rust
-// examples/my_example.rs
-use mihomo_rs::*;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Example implementation
-    Ok(())
-}
-```
-
-## Documentation
-
-### README Updates
-
-Update README.md when:
-- Adding new features
-- Changing public APIs
-- Adding new examples
-
-### API Documentation
-
-Update doc comments when:
-- Adding new public functions
-- Changing function signatures
-- Modifying behavior
-
-### Examples
-
-Add examples when:
-- Implementing new features
-- Demonstrating complex usage
-- Showing best practices
-
-## Release Process
-
-Releases are automated via GitHub Actions:
-
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Commit changes
-4. Create and push tag:
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-5. GitHub Actions will:
-   - Build binaries for all platforms
-   - Create GitHub release
-   - Publish to crates.io
-
-## Getting Help
-
-- **Issues**: Open an issue on GitHub
-- **Discussions**: Use GitHub Discussions
-- **Questions**: Ask in issues with `question` label
-
-## Recognition
-
-Contributors will be:
-- Listed in release notes
-- Mentioned in CHANGELOG.md
-- Credited in documentation
-
-Thank you for contributing to mihomo-rs! 🎉
+Open an issue or draft PR for early discussion when uncertain about direction.
