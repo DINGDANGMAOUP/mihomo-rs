@@ -150,59 +150,20 @@ mihomo-rs connection close-all --force
 
 ## Examples
 
-The [examples/](./examples/) directory includes comprehensive examples:
+The [examples/](./examples/) directory is now organized as a progressive 8-step path:
 
-### Quick Start
-- [hello_mihomo.rs](./examples/hello_mihomo.rs) - Minimal example
-- [basic_workflow.rs](./examples/basic_workflow.rs) - Complete beginner workflow
-
-### Version Management
-- [install_version.rs](./examples/install_version.rs) - Install specific version
-- [install_by_channel.rs](./examples/install_by_channel.rs) - Install from channel
-- [list_versions.rs](./examples/list_versions.rs) - List installed versions
-- [manage_versions.rs](./examples/manage_versions.rs) - Version lifecycle
-
-### Configuration
-- [manage_profiles.rs](./examples/manage_profiles.rs) - Profile management
-- [custom_config.rs](./examples/custom_config.rs) - Custom configuration
-- [external_controller.rs](./examples/external_controller.rs) - Controller setup
-
-### Service Management
-- [service_lifecycle.rs](./examples/service_lifecycle.rs) - Start/stop/restart
-- [service_status.rs](./examples/service_status.rs) - Check status
-- [auto_restart.rs](./examples/auto_restart.rs) - Auto-restart logic
-
-### Proxy Operations
-- [list_proxies.rs](./examples/list_proxies.rs) - List all proxies
-- [list_groups.rs](./examples/list_groups.rs) - List proxy groups
-- [switch_proxy.rs](./examples/switch_proxy.rs) - Switch proxy
-- [test_delay.rs](./examples/test_delay.rs) - Test latency
-- [current_proxy.rs](./examples/current_proxy.rs) - Current selections
-
-### Monitoring
-- [stream_logs.rs](./examples/stream_logs.rs) - Real-time logs
-- [stream_logs_filtered.rs](./examples/stream_logs_filtered.rs) - Filtered logs
-- [stream_traffic.rs](./examples/stream_traffic.rs) - Traffic monitoring
-- [memory_usage.rs](./examples/memory_usage.rs) - Memory usage
-
-### Connection Management
-- [list_connections.rs](./examples/list_connections.rs) - List active connections with filtering
-- [close_connections.rs](./examples/close_connections.rs) - Close connections by ID, host, or process
-- [stream_connections.rs](./examples/stream_connections.rs) - Real-time connection monitoring
-
-### Advanced
-- [custom_home_dir.rs](./examples/custom_home_dir.rs) - Custom home directory
-- [complete_workflow.rs](./examples/complete_workflow.rs) - Full application
-- [error_handling.rs](./examples/error_handling.rs) - Error patterns
-- [concurrent_operations.rs](./examples/concurrent_operations.rs) - Parallel ops
-
-### Integration
-- [first_time_setup.rs](./examples/first_time_setup.rs) - First-time setup
-- [migration_helper.rs](./examples/migration_helper.rs) - Migration guide
+- [01_bootstrap.rs](./examples/01_bootstrap.rs) - Initialize managers with isolated home
+- [02_config_profiles.rs](./examples/02_config_profiles.rs) - Profile save/list/switch flow
+- [03_version_inventory.rs](./examples/03_version_inventory.rs) - Version inventory and default lookup
+- [04_service_lifecycle_dry_run.rs](./examples/04_service_lifecycle_dry_run.rs) - ServiceManager construction and status checks
+- [05_proxy_queries.rs](./examples/05_proxy_queries.rs) - Proxy groups and node queries (online)
+- [06_connection_queries.rs](./examples/06_connection_queries.rs) - Connection list/filter/statistics (online)
+- [07_streaming.rs](./examples/07_streaming.rs) - Log and traffic streaming entrypoints (online)
+- [08_complete_workflow.rs](./examples/08_complete_workflow.rs) - End-to-end orchestration template
 
 Run any example with:
 ```bash
-cargo run --example hello_mihomo
+cargo run --example 01_bootstrap
 ```
 
 See [examples/README.md](./examples/README.md) for detailed documentation.
@@ -234,7 +195,7 @@ mihomo-rs/
 │   ├── connection/     # Connection management
 │   │   └── manager.rs  # ConnectionManager
 │   └── cli/            # CLI application
-├── examples/           # 31 comprehensive examples
+├── examples/           # 8 progressive examples
 └── tests/              # Integration tests
 ```
 
@@ -361,11 +322,19 @@ cargo build --release
 cargo test
 ```
 
+### Coverage Gate
+
+```bash
+cargo install cargo-llvm-cov --locked
+rustup component add llvm-tools-preview
+cargo llvm-cov --workspace --all-features --tests --summary-only --fail-under-lines 96
+```
+
 ### Running Examples
 
 ```bash
 # Enable logging for debugging
-RUST_LOG=debug cargo run --example basic_workflow
+RUST_LOG=debug cargo run --example 01_bootstrap
 ```
 
 ## Use Cases

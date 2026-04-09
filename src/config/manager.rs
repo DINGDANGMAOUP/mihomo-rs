@@ -318,3 +318,138 @@ external-controller: 127.0.0.1:{}
         Some((host, port))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ConfigManager;
+    use tempfile::tempdir;
+    use tokio::fs;
+
+    fn sample_config() -> &'static str {
+        "port: 7890\nsocks-port: 7891\nexternal-controller: 127.0.0.1:9090\n"
+    }
+
+    #[test]
+    fn is_local_controller_host_matches_expected_values() {
+        assert!(ConfigManager::is_local_controller_host("127.0.0.1"));
+        assert!(ConfigManager::is_local_controller_host("localhost"));
+        assert!(ConfigManager::is_local_controller_host("0.0.0.0"));
+        assert!(ConfigManager::is_local_controller_host("::1"));
+        assert!(!ConfigManager::is_local_controller_host("example.com"));
+        assert!(!ConfigManager::is_local_controller_host("192.168.1.1"));
+    }
+
+    #[test]
+    fn extract_host_port_parses_valid_input_and_rejects_invalid() {
+        let parsed = ConfigManager::extract_host_port("127.0.0.1:9090")
+            .expect("valid host:port should parse");
+        assert_eq!(parsed.0, "127.0.0.1");
+        assert_eq!(parsed.1, 9090);
+
+        assert!(ConfigManager::extract_host_port("localhost").is_none());
+        assert!(ConfigManager::extract_host_port("bad::addr").is_none());
+    }
+
+    #[test]
+    fn config_manager_new_smoke() {
+        let manager = ConfigManager::new().expect("config manager should be constructible");
+        let _ = manager.settings_file.clone();
+    }
+
+    #[tokio::test]
+    async fn list_profiles_ignores_non_yaml_entries() {
+        let temp = tempdir().expect("create temp dir");
+        let manager =
+            ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
+
+        fs::create_dir_all(&manager.config_dir)
+            .await
+            .expect("create config dir");
+        fs::write(
+            manager.config_dir.join("notes.txt"),
+            "this should not be treated as profile",
+        )
+        .await
+        .expect("write non-yaml file");
+
+        let profiles = manager.list_profiles().await.expect("list profiles");
+        assert!(profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_current_path_uses_selected_profile() {
+        let temp = tempdir().expect("create temp dir");
+        let manager =
+            ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
+
+        manager
+            .save(
+                "alpha",
+                "port: 7890\nsocks-port: 7891\nexternal-controller: 127.0.0.1:9090\n",
+            )
+            .await
+            .expect("save alpha profile");
+        manager
+            .set_current("alpha")
+            .await
+            .expect("set current profile");
+
+        let current_path = manager.get_current_path().await.expect("get current path");
+        assert_eq!(current_path, manager.config_dir.join("alpha.yaml"));
+    }
+
+    #[tokio::test]
+    async fn unit_module_profile_lifecycle_hits_file_branches() {
+        let temp = tempdir().expect("create temp dir");
+        let manager =
+            ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
+
+        assert_eq!(
+            manager
+                .list_profiles()
+                .await
+                .expect("list without dir should work")
+                .len(),
+            0
+        );
+
+        manager
+            .save("alpha", sample_config())
+            .await
+            .expect("save alpha");
+        manager
+            .save("beta", sample_config())
+            .await
+            .expect("save beta");
+
+        let loaded = manager.load("alpha").await.expect("load alpha");
+        assert!(loaded.contains("external-controller"));
+
+        let profiles = manager.list_profiles().await.expect("list profiles");
+        assert_eq!(profiles.len(), 2);
+
+        manager.set_current("beta").await.expect("set beta current");
+        manager.set_current("alpha").await.expect("set alpha current");
+        assert_eq!(
+            manager.get_current().await.expect("read current profile"),
+            "alpha"
+        );
+        assert_eq!(
+            manager.get_current_path().await.expect("current path"),
+            manager.config_dir.join("alpha.yaml")
+        );
+        assert!(
+            manager
+                .ensure_external_controller()
+                .await
+                .expect("ensure external controller")
+                .starts_with("http://127.0.0.1:")
+        );
+
+        manager
+            .delete_profile("beta")
+            .await
+            .expect("delete non-active profile should succeed");
+        assert!(!manager.config_dir.join("beta.yaml").exists());
+    }
+}

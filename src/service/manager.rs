@@ -194,6 +194,12 @@ mod tests {
         assert!(count.load(Ordering::Relaxed) >= 3);
     }
 
+    #[tokio::test]
+    async fn test_wait_for_stop_returns_false_when_condition_never_met() {
+        let stopped = ServiceManager::wait_for_stop(|| false, 2, Duration::from_millis(1)).await;
+        assert!(!stopped);
+    }
+
     #[test]
     fn test_with_stop_wait_overrides_defaults() {
         let manager = ServiceManager::with_pid_file(
@@ -205,5 +211,18 @@ mod tests {
 
         assert_eq!(manager.stop_retries, 3);
         assert_eq!(manager.stop_interval, Duration::from_millis(5));
+    }
+
+    #[test]
+    fn test_with_stop_wait_clamps_to_minimum_values() {
+        let manager = ServiceManager::with_pid_file(
+            PathBuf::from("/bin/echo"),
+            PathBuf::from("/tmp/config.yaml"),
+            PathBuf::from("/tmp/mihomo.pid"),
+        )
+        .with_stop_wait(0, Duration::from_millis(0));
+
+        assert_eq!(manager.stop_retries, 1);
+        assert_eq!(manager.stop_interval, Duration::from_millis(1));
     }
 }

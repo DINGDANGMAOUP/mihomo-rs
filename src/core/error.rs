@@ -113,4 +113,11 @@ mod tests {
         assert_eq!(returns_ok().unwrap(), 42);
         assert!(returns_err().is_err());
     }
+
+    #[test]
+    fn test_websocket_error_conversion() {
+        let ws_err = tokio_tungstenite::tungstenite::Error::ConnectionClosed;
+        let mihomo_err: MihomoError = ws_err.into();
+        assert!(matches!(mihomo_err, MihomoError::WebSocket(_)));
+    }
 }

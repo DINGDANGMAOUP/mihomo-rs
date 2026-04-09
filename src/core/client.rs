@@ -443,20 +443,8 @@ impl MihomoClient {
                         path.push_str(&serializer.finish());
                     }
 
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET {} HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        path, auth_header
-                    );
+                    let ws_url = format!("ws://localhost{}", path);
+                    let request = MihomoClient::ws_request_with_auth(&ws_url, secret.as_deref())?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -515,20 +503,8 @@ impl MihomoClient {
                         path.push_str(&serializer.finish());
                     }
 
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET {} HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        path, auth_header
-                    );
+                    let ws_url = format!("ws://localhost{}", path);
+                    let request = MihomoClient::ws_request_with_auth(&ws_url, secret.as_deref())?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -617,20 +593,8 @@ impl MihomoClient {
                     )
                     .await
                     .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET /traffic HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        auth_header
-                    );
+                    let request =
+                        MihomoClient::ws_request_with_auth("ws://localhost/traffic", secret.as_deref())?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -685,20 +649,8 @@ impl MihomoClient {
                             e
                         ))
                     })??;
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET /traffic HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        auth_header
-                    );
+                    let request =
+                        MihomoClient::ws_request_with_auth("ws://localhost/traffic", secret.as_deref())?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -826,20 +778,10 @@ impl MihomoClient {
                     )
                     .await
                     .map_err(|_| Self::ws_timeout_error("connections"))??;
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET /connections HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        auth_header
-                    );
+                    let request = MihomoClient::ws_request_with_auth(
+                        "ws://localhost/connections",
+                        secret.as_deref(),
+                    )?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -894,20 +836,10 @@ impl MihomoClient {
                             e
                         ))
                     })??;
-                    let auth_header = secret
-                        .as_ref()
-                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                        .unwrap_or_default();
-                    let request = format!(
-                        "GET /connections HTTP/1.1\r\n\
-                         Host: localhost\r\n\
-                         Upgrade: websocket\r\n\
-                         Connection: Upgrade\r\n\
-                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                         Sec-WebSocket-Version: 13\r\n\
-                         {}\r\n",
-                        auth_header
-                    );
+                    let request = MihomoClient::ws_request_with_auth(
+                        "ws://localhost/connections",
+                        secret.as_deref(),
+                    )?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -946,8 +878,14 @@ impl MihomoClient {
 mod tests {
     use super::*;
     use mockito::{Matcher, Server};
+    #[cfg(unix)]
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::net::TcpListener;
+    #[cfg(unix)]
+    use tokio::net::UnixListener;
     use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
+    #[cfg(unix)]
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn test_client_new() {
@@ -985,6 +923,14 @@ mod tests {
     }
 
     #[test]
+    fn test_with_ws_connect_timeout_clamps_to_minimum() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None)
+            .unwrap()
+            .with_ws_connect_timeout(Duration::from_millis(0));
+        assert_eq!(client.ws_connect_timeout, Duration::from_millis(1));
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_client_new_unix_socket() {
         let client = MihomoClient::new("/var/run/mihomo.sock", None);
@@ -996,6 +942,140 @@ mod tests {
     fn test_client_new_unix_socket_uri() {
         let client = MihomoClient::new("unix:///var/run/mihomo.sock", None);
         assert!(client.is_ok());
+    }
+
+    #[cfg(unix)]
+    fn unique_socket_path(prefix: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::path::PathBuf::from(format!(
+            "/tmp/mihomo-rs-{}-{}-{}.sock",
+            prefix,
+            std::process::id(),
+            nanos
+        ))
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_unix_http_get_version() {
+        let socket = unique_socket_path("version");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        let server_task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept");
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).await.expect("read request");
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            assert!(request.starts_with("GET /version HTTP/1.1"));
+
+            let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 50\r\n\r\n{\"version\":\"v1.20.0\",\"premium\":false,\"meta\":false}";
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write response");
+        });
+
+        let client = MihomoClient::new(socket.to_str().expect("socket str"), None).unwrap();
+        let version = client.get_version().await.expect("get version");
+        assert_eq!(version.version, "v1.20.0");
+
+        server_task.await.expect("server task");
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_unix_http_error_response() {
+        let socket = unique_socket_path("http-error");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        let server_task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept");
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf).await.expect("read request");
+            let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nboom";
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write error response");
+        });
+
+        let client = MihomoClient::new(socket.to_str().expect("socket str"), None).unwrap();
+        let err = client.get_version().await.expect_err("expect HTTP error");
+        assert!(err.to_string().contains("HTTP error 500"));
+
+        server_task.await.expect("server task");
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_unix_reload_config_with_auth_and_query() {
+        let socket = unique_socket_path("reload");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        let server_task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept");
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).await.expect("read request");
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            assert!(request.starts_with("PUT /configs?force=true HTTP/1.1"));
+            assert!(request.contains("Authorization: Bearer secret-token"));
+            assert!(request.contains("\"path\":\"/tmp/test-config.yaml\""));
+
+            let response = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write response");
+        });
+
+        let client = MihomoClient::new(
+            socket.to_str().expect("socket str"),
+            Some("secret-token".to_string()),
+        )
+        .unwrap();
+        client
+            .reload_config(Some("/tmp/test-config.yaml"))
+            .await
+            .expect("reload config");
+
+        server_task.await.expect("server task");
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    async fn test_http_request_put_with_query_and_body_over_tcp() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/raw")
+            .match_query(Matcher::UrlEncoded("k".into(), "v".into()))
+            .match_header("authorization", "Bearer token-1")
+            .match_body(Matcher::JsonString(r#"{"value":1}"#.to_string()))
+            .with_status(200)
+            .with_body("ok")
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), Some("token-1".to_string())).unwrap();
+        let body = client
+            .http_request(
+                "PUT",
+                "/raw",
+                Some(&[("k", "v".to_string())]),
+                Some(json!({"value": 1})),
+            )
+            .await
+            .expect("http request should succeed");
+
+        mock.assert_async().await;
+        assert_eq!(body, b"ok");
     }
 
     #[test]
@@ -1030,6 +1110,16 @@ mod tests {
         assert!(result.is_ok());
         let version = result.unwrap();
         assert_eq!(version.version, "v1.18.0");
+    }
+
+    #[tokio::test]
+    async fn test_http_request_rejects_unsupported_method() {
+        let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
+        let err = client
+            .http_request("POST", "/version", None, None)
+            .await
+            .expect_err("unsupported method should fail");
+        assert!(err.to_string().contains("Unsupported method"));
     }
 
     #[tokio::test]
@@ -1290,6 +1380,16 @@ mod tests {
         assert_eq!(auth, Some("Bearer my-secret"));
     }
 
+    #[test]
+    fn test_ws_request_with_invalid_header_value_is_ignored() {
+        let request = MihomoClient::ws_request_with_auth(
+            "ws://127.0.0.1:9090/logs",
+            Some("bad\r\nsecret"),
+        )
+        .expect("request should still be built");
+        assert!(request.headers().get("Authorization").is_none());
+    }
+
     #[tokio::test]
     async fn test_stream_logs_message_handling() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1357,5 +1457,188 @@ mod tests {
         tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
             .await
             .ok();
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_logs_over_unix_socket() {
+        let socket = unique_socket_path("stream-logs");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text("unix log line".into()))
+                .await
+                .expect("send unix log");
+        });
+
+        let client = MihomoClient::new(
+            socket.to_str().expect("socket path"),
+            Some("secret-token".to_string()),
+        )
+        .unwrap();
+        let mut rx = client
+            .stream_logs(Some("debug"))
+            .await
+            .expect("unix logs stream");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("log item");
+        assert_eq!(got, "unix log line");
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_traffic_over_unix_socket() {
+        let socket = unique_socket_path("stream-traffic");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text(r#"{"up":7,"down":9}"#.into()))
+                .await
+                .expect("send unix traffic");
+        });
+
+        let client = MihomoClient::new(
+            socket.to_str().expect("socket path"),
+            Some("secret-token".to_string()),
+        )
+        .unwrap();
+        let mut rx = client
+            .stream_traffic()
+            .await
+            .expect("unix traffic stream");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("traffic item");
+        assert_eq!(got.up, 7);
+        assert_eq!(got.down, 9);
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_connections_over_unix_socket() {
+        let socket = unique_socket_path("stream-connections");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            use futures_util::SinkExt;
+            tx.send(WsMessage::Text(
+                r#"{"connections":[],"downloadTotal":0,"uploadTotal":0}"#.into(),
+            ))
+            .await
+            .expect("send unix connections");
+        });
+
+        let client = MihomoClient::new(
+            socket.to_str().expect("socket path"),
+            Some("secret-token".to_string()),
+        )
+        .unwrap();
+        let mut rx = client
+            .stream_connections()
+            .await
+            .expect("unix connections stream");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("snapshot item");
+        assert_eq!(got.connections.len(), 0);
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_logs_over_unix_socket_sender_breaks_when_receiver_dropped() {
+        use futures_util::SinkExt;
+        let socket = unique_socket_path("stream-logs-drop");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            tx.send(WsMessage::Text("drop".into())).await.ok();
+        });
+
+        let client = MihomoClient::new(socket.to_str().expect("socket path"), None).unwrap();
+        let rx = client.stream_logs(None).await.expect("stream logs");
+        drop(rx);
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_traffic_over_unix_socket_sender_breaks_when_receiver_dropped() {
+        use futures_util::SinkExt;
+        let socket = unique_socket_path("stream-traffic-drop");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            tx.send(WsMessage::Text(r#"{"up":1,"down":2}"#.into()))
+                .await
+                .ok();
+        });
+
+        let client = MihomoClient::new(socket.to_str().expect("socket path"), None).unwrap();
+        let rx = client.stream_traffic().await.expect("stream traffic");
+        drop(rx);
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_stream_connections_over_unix_socket_sender_breaks_when_receiver_dropped() {
+        use futures_util::SinkExt;
+        let socket = unique_socket_path("stream-connections-drop");
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind unix socket");
+
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = accept_async(stream).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            tx.send(WsMessage::Text(
+                r#"{"connections":[],"downloadTotal":0,"uploadTotal":0}"#.into(),
+            ))
+            .await
+            .ok();
+        });
+
+        let client = MihomoClient::new(socket.to_str().expect("socket path"), None).unwrap();
+        let rx = client
+            .stream_connections()
+            .await
+            .expect("stream connections");
+        drop(rx);
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        let _ = std::fs::remove_file(&socket);
     }
 }

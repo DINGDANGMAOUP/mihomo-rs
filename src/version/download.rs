@@ -305,4 +305,10 @@ mod tests {
         assert!(filename.contains(version));
         assert!(filename.ends_with(".zip") || filename.ends_with(".gz"));
     }
+
+    #[test]
+    fn test_default_downloader_constructs_client() {
+        let downloader = Downloader::default();
+        let _ = downloader.client.clone();
+    }
 }

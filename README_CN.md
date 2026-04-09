@@ -151,21 +151,20 @@ mihomo-rs connection close-all --force
 
 ## 示例
 
-[examples/](./examples/) 目录包含综合示例:
+[examples/](./examples/) 目录采用 8 段渐进式示例:
 
-- **快速开始** - 基础示例和完整工作流程
-- **版本管理** - 安装、列出和管理版本
-- **配置管理** - 配置文件和外部控制器设置
-- **服务管理** - 启动、停止、重启和状态检查
-- **代理操作** - 列出、切换和测试代理
-- **监控** - 实时日志、流量和内存监控
-- **连接管理** - 列出、过滤、关闭和实时监控活动连接
-- **高级用法** - 自定义主目录、错误处理、并发操作
-- **集成** - 首次设置和迁移指南
+- `01_bootstrap.rs` - 使用隔离 home 初始化管理器
+- `02_config_profiles.rs` - 配置保存、列举、切换
+- `03_version_inventory.rs` - 版本清单与默认版本读取
+- `04_service_lifecycle_dry_run.rs` - 服务管理器构造与状态检查
+- `05_proxy_queries.rs` - 代理组与代理节点查询(在线)
+- `06_connection_queries.rs` - 连接查询/过滤/统计(在线)
+- `07_streaming.rs` - 日志与流量流式读取入口(在线)
+- `08_complete_workflow.rs` - 端到端流程模板
 
 运行示例:
 ```bash
-cargo run --example hello_mihomo
+cargo run --example 01_bootstrap
 ```
 
 查看 [examples/README.md](./examples/README.md) 获取详细文档。
@@ -240,6 +239,14 @@ cargo build --release
 
 ```bash
 cargo test
+```
+
+### 覆盖率门禁
+
+```bash
+cargo install cargo-llvm-cov --locked
+rustup component add llvm-tools-preview
+cargo llvm-cov --workspace --all-features --tests --summary-only --fail-under-lines 96
 ```
 
 ## 贡献

@@ -157,6 +157,7 @@ pub async fn remove_pid_file(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tempfile::NamedTempFile;
     use tokio::fs;
 
@@ -212,10 +213,103 @@ mod tests {
         let pid = std::process::id();
         let start_time = get_process_start_time(pid);
         assert!(start_time.is_some());
+        assert!(is_process_alive_checked(pid, None));
         assert!(is_process_alive_checked(pid, start_time));
         assert!(!is_process_alive_checked(
             pid,
             start_time.map(|value| value.saturating_add(1))
         ));
+    }
+
+    #[tokio::test]
+    async fn test_read_write_pid_file_legacy_helpers() {
+        let file = NamedTempFile::new().expect("create temp file");
+        let path = file.path();
+
+        write_pid_file(path, 4242).await.expect("write pid file");
+        let pid = read_pid_file(path).await.expect("read pid file");
+        assert_eq!(pid, 4242);
+    }
+
+    #[tokio::test]
+    async fn test_read_pid_record_invalid_content_errors() {
+        let file = NamedTempFile::new().expect("create temp file");
+        let path = file.path();
+
+        fs::write(path, "not-a-pid").await.expect("write invalid pid");
+        assert!(read_pid_record(path).await.is_err());
+
+        fs::write(path, "1234:not-a-start-time")
+            .await
+            .expect("write invalid start_time");
+        assert!(read_pid_record(path).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_remove_pid_file_exists_and_missing() {
+        let file = NamedTempFile::new().expect("create temp file");
+        let path = file.path().to_path_buf();
+
+        remove_pid_file(&path).await.expect("remove existing pid file");
+        assert!(!path.exists());
+
+        remove_pid_file(&path).await.expect("remove missing pid file");
+    }
+
+    #[tokio::test]
+    async fn test_spawn_daemon_reports_missing_binary_and_config() {
+        let missing_binary = PathBuf::from("/definitely/not/existing/mihomo-bin");
+        let missing_config = PathBuf::from("/definitely/not/existing/config.yaml");
+        assert!(spawn_daemon(&missing_binary, &missing_config).await.is_err());
+
+        let binary_file = NamedTempFile::new().expect("create fake binary");
+        assert!(spawn_daemon(binary_file.path(), &missing_config).await.is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_spawn_daemon_returns_service_error_when_spawn_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let binary_file = NamedTempFile::new().expect("create fake binary");
+        let config_file = NamedTempFile::new().expect("create fake config");
+
+        fs::write(binary_file.path(), "#!/bin/sh\necho test\n")
+            .await
+            .expect("write fake binary");
+        tokio::fs::set_permissions(binary_file.path(), std::fs::Permissions::from_mode(0o644))
+            .await
+            .expect("set non-executable permissions");
+
+        let err = spawn_daemon(binary_file.path(), config_file.path())
+            .await
+            .expect_err("spawn should fail for non-executable file");
+        assert!(err.to_string().contains("Failed to spawn process"));
+    }
+
+    #[test]
+    fn test_kill_process_checked_rejects_mismatched_process_record() {
+        let err =
+            kill_process_checked(u32::MAX, Some(1)).expect_err("mismatched pid record should fail");
+        assert!(err.to_string().contains("no longer matches tracked process"));
+    }
+
+    #[tokio::test]
+    async fn test_write_pid_record_creates_parent_directories() {
+        let file = NamedTempFile::new().expect("create temp file");
+        let nested = file
+            .path()
+            .parent()
+            .expect("temp file parent")
+            .join("nested")
+            .join("dir")
+            .join("mihomo.pid");
+
+        write_pid_record(&nested, 7788, Some(9900))
+            .await
+            .expect("write pid record into nested path");
+        let record = read_pid_record(&nested).await.expect("read nested pid record");
+        assert_eq!(record.pid, 7788);
+        assert_eq!(record.start_time, Some(9900));
     }
 }

@@ -254,6 +254,7 @@ impl VersionManager {
 #[cfg(test)]
 mod tests {
     use super::VersionManager;
+    use std::path::Path;
     use std::path::PathBuf;
     use tempfile::tempdir;
     use tokio::fs;
@@ -267,6 +268,24 @@ mod tests {
         let path2 = vm.temp_download_path("v1.0.0", "mihomo");
 
         assert_ne!(path1, path2);
+    }
+
+    #[test]
+    fn test_version_manager_new_smoke() {
+        let manager = VersionManager::new().expect("version manager should be constructible");
+        let _ = manager.install_dir.clone();
+    }
+
+    #[test]
+    fn test_parse_semver_supports_v_prefix_and_plain_values() {
+        assert!(VersionManager::parse_semver("v1.2.3").is_some());
+        assert!(VersionManager::parse_semver("1.2.3").is_some());
+    }
+
+    #[test]
+    fn test_parse_semver_rejects_invalid_values() {
+        assert!(VersionManager::parse_semver("snapshot").is_none());
+        assert!(VersionManager::parse_semver("v1").is_none());
     }
 
     #[tokio::test]
@@ -301,5 +320,104 @@ mod tests {
                 "v1.2.0".to_string(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_installed_returns_empty_when_directory_missing() {
+        let temp = tempdir().expect("create temp dir");
+        let vm = VersionManager::with_home(temp.path().to_path_buf())
+            .expect("version manager should be created");
+        let listed = vm.list_installed().await.expect("list installed");
+        assert!(listed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_installed_ignores_non_directory_entries() {
+        let temp = tempdir().expect("create temp dir");
+        let vm = VersionManager::with_home(temp.path().to_path_buf())
+            .expect("version manager should be created");
+
+        fs::create_dir_all(&vm.install_dir)
+            .await
+            .expect("create install dir");
+        fs::write(vm.install_dir.join("README.txt"), b"not a version dir")
+            .await
+            .expect("write marker file");
+        fs::create_dir_all(vm.install_dir.join("v1.0.0"))
+            .await
+            .expect("create version dir");
+
+        let listed = vm.list_installed().await.expect("list installed");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].version, "v1.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_install_returns_error_when_version_already_installed() {
+        let temp = tempdir().expect("create temp dir");
+        let vm = VersionManager::with_home(temp.path().to_path_buf())
+            .expect("version manager should be created");
+
+        let existing = vm.install_dir.join("v9.9.9");
+        fs::create_dir_all(&existing)
+            .await
+            .expect("create existing version directory");
+
+        let err = vm
+            .install("v9.9.9")
+            .await
+            .expect_err("existing version should fail install");
+        assert!(err.to_string().contains("already installed"));
+        assert!(Path::new(&existing).exists());
+    }
+
+    #[tokio::test]
+    async fn test_set_get_default_and_binary_path_roundtrip() {
+        let temp = tempdir().expect("create temp dir");
+        let vm = VersionManager::with_home(temp.path().to_path_buf())
+            .expect("version manager should be created");
+
+        let version_dir = vm.install_dir.join("v1.2.3");
+        fs::create_dir_all(&version_dir)
+            .await
+            .expect("create version directory");
+        let binary_name = if cfg!(windows) { "mihomo.exe" } else { "mihomo" };
+        let binary_path = version_dir.join(binary_name);
+        fs::write(&binary_path, b"fake-binary")
+            .await
+            .expect("write fake binary");
+
+        vm.set_default("v1.2.3")
+            .await
+            .expect("set default version");
+        let default_version = vm.get_default().await.expect("get default version");
+        assert_eq!(default_version, "v1.2.3");
+
+        let resolved = vm.get_binary_path(None).await.expect("resolve binary path");
+        assert_eq!(resolved, binary_path);
+    }
+
+    #[tokio::test]
+    async fn test_uninstall_removes_non_default_version() {
+        let temp = tempdir().expect("create temp dir");
+        let vm = VersionManager::with_home(temp.path().to_path_buf())
+            .expect("version manager should be created");
+
+        let keep = vm.install_dir.join("v1.0.0");
+        let remove = vm.install_dir.join("v1.1.0");
+        fs::create_dir_all(&keep).await.expect("create keep version");
+        fs::create_dir_all(&remove)
+            .await
+            .expect("create remove version");
+
+        vm.set_default("v1.0.0")
+            .await
+            .expect("set default version");
+        vm.uninstall("v1.1.0")
+            .await
+            .expect("uninstall non-default version");
+
+        assert!(keep.exists());
+        assert!(!remove.exists());
     }
 }

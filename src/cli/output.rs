@@ -88,12 +88,42 @@ fn print_padded(input: &str, width: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::display_width;
+    use super::{display_width, print_error, print_info, print_success, print_table};
 
     #[test]
     fn test_display_width_mixed_language() {
         assert_eq!(display_width("abc"), 3);
         assert_eq!(display_width("测试"), 4);
         assert_eq!(display_width("a测b"), 4);
+    }
+
+    #[test]
+    fn test_print_colored_messages_do_not_panic() {
+        print_success("operation ok");
+        print_info("some info");
+        print_error("some error");
+    }
+
+    #[test]
+    fn test_print_table_empty_rows_returns_early() {
+        print_table(&["name", "value"], vec![]);
+    }
+
+    #[test]
+    fn test_print_table_with_mixed_content() {
+        let headers = vec!["name", "status", "note"];
+        let rows = vec![
+            vec![
+                "alpha".to_string(),
+                "running".to_string(),
+                "plain ascii".to_string(),
+            ],
+            vec![
+                "测试节点".to_string(),
+                "ok".to_string(),
+                "mixed 中文 + english".to_string(),
+            ],
+        ];
+        print_table(&headers, rows);
     }
 }
