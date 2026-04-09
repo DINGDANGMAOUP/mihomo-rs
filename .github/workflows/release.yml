@@ -20,7 +20,7 @@ jobs:
     name: Validate Tag Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
       - name: Verify tag version matches Cargo.toml
         run: |
@@ -44,7 +44,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@v2
         with:
           body: |
             ## Changes
@@ -106,10 +106,10 @@ jobs:
             asset_name: mihomo-rs-windows-amd64.exe
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload Release Asset (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ./${{ matrix.asset_name }}.tar.gz
@@ -172,7 +172,7 @@ jobs:
 
       - name: Upload Release Asset (Windows)
         if: matrix.os == 'windows-latest'
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ./${{ matrix.asset_name }}.zip
@@ -183,10 +183,10 @@ jobs:
     needs: build-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Pre-publish smoke test
         run: cargo test --all-features --locked
