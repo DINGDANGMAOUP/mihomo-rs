@@ -1,15 +1,11 @@
 use super::error::Result;
 use super::types::*;
-use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::io::AsyncRead;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
@@ -27,8 +23,6 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'|')
     .add(b'}');
-const HTTP_READ_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
 
 #[derive(Clone)]
 enum Transport {
@@ -44,91 +38,6 @@ pub struct MihomoClient {
 }
 
 impl MihomoClient {
-    async fn read_http_response<R>(reader: &mut R) -> Result<Vec<u8>>
-    where
-        R: AsyncRead + Unpin,
-    {
-        use tokio::io::AsyncReadExt;
-
-        let mut response = Vec::new();
-        let mut buf = [0u8; 4096];
-        let header_end = loop {
-            let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
-                .await
-                .map_err(|_| {
-                    super::error::MihomoError::Service(
-                        "Timeout while reading HTTP response headers".to_string(),
-                    )
-                })??;
-
-            if n == 0 {
-                return Err(super::error::MihomoError::config("Invalid HTTP response"));
-            }
-
-            response.extend_from_slice(&buf[..n]);
-            if response.len() > MAX_HTTP_HEADER_BYTES {
-                return Err(super::error::MihomoError::config(
-                    "Invalid HTTP response: headers too large",
-                ));
-            }
-
-            if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
-                break pos + 4;
-            }
-        };
-
-        let headers = &response[..header_end];
-        let headers_text = String::from_utf8_lossy(headers);
-        let status_line = headers_text.lines().next().unwrap_or_default();
-        let status_code = status_line
-            .split_whitespace()
-            .nth(1)
-            .and_then(|code| code.parse::<u16>().ok());
-
-        let content_length = headers_text.lines().find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            if name.trim().eq_ignore_ascii_case("content-length") {
-                value.trim().parse::<usize>().ok()
-            } else {
-                None
-            }
-        });
-
-        let mut body = response[header_end..].to_vec();
-        match content_length {
-            Some(expected) => {
-                while body.len() < expected {
-                    let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
-                        .await
-                        .map_err(|_| {
-                            super::error::MihomoError::Service(
-                                "Timeout while reading HTTP response body".to_string(),
-                            )
-                        })??;
-                    if n == 0 {
-                        break;
-                    }
-                    body.extend_from_slice(&buf[..n]);
-                }
-            }
-            None => {
-                return Err(super::error::MihomoError::config(
-                    "Invalid HTTP response: missing Content-Length",
-                ));
-            }
-        }
-
-        if matches!(status_code, Some(code) if code >= 400) {
-            return Err(super::error::MihomoError::Service(format!(
-                "HTTP error {}: {}",
-                status_code.unwrap_or_default(),
-                String::from_utf8_lossy(&body)
-            )));
-        }
-
-        Ok(body)
-    }
-
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
         let transport = if base_url.starts_with('/')
             || base_url.starts_with("unix://")
@@ -153,193 +62,8 @@ impl MihomoClient {
         })
     }
 
-    async fn http_request(
-        &self,
-        method: &str,
-        path: &str,
-        query: Option<&[(&str, String)]>,
-        body: Option<serde_json::Value>,
-    ) -> Result<Vec<u8>> {
-        match &self.transport {
-            Transport::Tcp { client, base_url } => {
-                let url = base_url.join(path)?;
-                let mut req = match method {
-                    "GET" => client.get(url),
-                    "PUT" => client.put(url),
-                    "DELETE" => client.delete(url),
-                    _ => return Err(super::error::MihomoError::config("Unsupported method")),
-                };
-
-                if let Some(q) = query {
-                    req = req.query(q);
-                }
-                if let Some(b) = body {
-                    req = req.json(&b);
-                }
-                req = self.add_auth(req);
-
-                let resp = req.send().await?.error_for_status()?;
-                Ok(resp.bytes().await?.to_vec())
-            }
-            Transport::Unix { socket_path } => {
-                self.unix_http_request(method, path, query, body, socket_path)
-                    .await
-            }
-        }
-    }
-
-    async fn unix_http_request(
-        &self,
-        method: &str,
-        path: &str,
-        query: Option<&[(&str, String)]>,
-        body: Option<serde_json::Value>,
-        socket_path: &PathBuf,
-    ) -> Result<Vec<u8>> {
-        use tokio::io::AsyncWriteExt;
-
-        #[cfg(unix)]
-        {
-            use tokio::net::UnixStream;
-            let mut stream = UnixStream::connect(socket_path).await?;
-
-            let query_str = query
-                .map(|q| {
-                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                    for (k, v) in q {
-                        serializer.append_pair(k, v);
-                    }
-                    format!("?{}", serializer.finish())
-                })
-                .unwrap_or_default();
-
-            let body_str = match body {
-                Some(b) => serde_json::to_string(&b)?,
-                None => String::new(),
-            };
-
-            let auth_header = self
-                .secret
-                .as_ref()
-                .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                .unwrap_or_default();
-
-            let request = format!(
-                "{} {}{} HTTP/1.1\r\n\
-                 Host: localhost\r\n\
-                 Content-Length: {}\r\n\
-                 Content-Type: application/json\r\n\
-                 {}\r\n\
-                 {}",
-                method,
-                path,
-                query_str,
-                body_str.len(),
-                auth_header,
-                body_str
-            );
-
-            stream.write_all(request.as_bytes()).await?;
-            stream.flush().await?;
-            Self::read_http_response(&mut stream).await
-        }
-        #[cfg(windows)]
-        {
-            use tokio::net::windows::named_pipe::ClientOptions;
-
-            let pipe_path = socket_path.to_string_lossy();
-            let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                pipe_path.to_string()
-            } else {
-                format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-            };
-
-            let mut stream = ClientOptions::new().open(&pipe_name)?;
-
-            let query_str = query
-                .map(|q| {
-                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                    for (k, v) in q {
-                        serializer.append_pair(k, v);
-                    }
-                    format!("?{}", serializer.finish())
-                })
-                .unwrap_or_default();
-
-            let body_str = match body {
-                Some(b) => serde_json::to_string(&b)?,
-                None => String::new(),
-            };
-
-            let auth_header = self
-                .secret
-                .as_ref()
-                .map(|s| format!("Authorization: Bearer {}\r\n", s))
-                .unwrap_or_default();
-
-            let request = format!(
-                "{} {}{} HTTP/1.1\r\n\
-                 Host: localhost\r\n\
-                 Content-Length: {}\r\n\
-                 Content-Type: application/json\r\n\
-                 {}\r\n\
-                 {}",
-                method,
-                path,
-                query_str,
-                body_str.len(),
-                auth_header,
-                body_str
-            );
-
-            stream.write_all(request.as_bytes()).await?;
-            stream.flush().await?;
-            Self::read_http_response(&mut stream).await
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            let _ = (method, path, query, body, socket_path);
-            Err(super::error::MihomoError::config(
-                "Unix domain sockets are not supported on this platform",
-            ))
-        }
-    }
-
-    fn add_auth(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if let Some(secret) = &self.secret {
-            req = req.bearer_auth(secret);
-        }
-        req
-    }
-
     fn encode_path_segment(input: &str) -> String {
         utf8_percent_encode(input, PATH_SEGMENT_ENCODE_SET).to_string()
-    }
-
-    pub fn with_ws_connect_timeout(mut self, timeout: Duration) -> Self {
-        self.ws_connect_timeout = timeout.max(Duration::from_millis(1));
-        self
-    }
-
-    fn ws_request_with_auth(
-        url: &str,
-        secret: Option<&str>,
-    ) -> std::result::Result<
-        tokio_tungstenite::tungstenite::handshake::client::Request,
-        tokio_tungstenite::tungstenite::Error,
-    > {
-        let mut request = url.into_client_request()?;
-        if let Some(secret) = secret {
-            let header = format!("Bearer {}", secret);
-            if let Ok(value) = header.parse() {
-                request.headers_mut().insert("Authorization", value);
-            }
-        }
-        Ok(request)
-    }
-
-    fn ws_timeout_error(endpoint: &str) -> super::error::MihomoError {
-        super::error::MihomoError::Service(format!("WebSocket connection timeout: {}", endpoint))
     }
 
     pub async fn get_version(&self) -> Result<Version> {
@@ -409,321 +133,6 @@ impl MihomoClient {
         Ok(())
     }
 
-    pub async fn stream_logs(
-        &self,
-        level: Option<&str>,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<String>> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-
-        match &self.transport {
-            Transport::Tcp { base_url, .. } => {
-                let mut ws_url = base_url.clone();
-                ws_url
-                    .set_scheme(if ws_url.scheme() == "https" {
-                        "wss"
-                    } else {
-                        "ws"
-                    })
-                    .ok();
-                ws_url.set_path("/logs");
-                if let Some(level) = level {
-                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                    serializer.append_pair("level", level);
-                    ws_url.set_query(Some(&serializer.finish()));
-                }
-
-                let ws_url_str = ws_url.to_string();
-                let request =
-                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
-                let (ws_stream, _) =
-                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
-                        .await
-                        .map_err(|_| Self::ws_timeout_error("logs"))??;
-                tokio::spawn(async move {
-                    let (_, mut read) = ws_stream.split();
-                    while let Some(msg) = read.next().await {
-                        match msg {
-                            Ok(Message::Text(text)) => {
-                                if tx.send(text.to_string()).is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(Message::Close(_)) => break,
-                            Err(_) => break,
-                            _ => {}
-                        }
-                    }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
-                let level = level.map(|s| s.to_string());
-                let secret = self.secret.clone();
-
-                #[cfg(unix)]
-                {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
-
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        UnixStream::connect(&socket_path),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("logs"))??;
-                    let mut path = "/logs".to_string();
-                    if let Some(l) = level {
-                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                        serializer.append_pair("level", &l);
-                        path.push('?');
-                        path.push_str(&serializer.finish());
-                    }
-
-                    let ws_url = format!("ws://localhost{}", path);
-                    let request = MihomoClient::ws_request_with_auth(&ws_url, secret.as_deref())?;
-
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("logs"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if tx.send(text.to_string()).is_err() {
-                                        break;
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
-                }
-                #[cfg(windows)]
-                {
-                    use tokio::net::windows::named_pipe::ClientOptions;
-                    use tokio_tungstenite::client_async;
-
-                    let pipe_path = socket_path.to_string_lossy();
-                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                        pipe_path.to_string()
-                    } else {
-                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-                    };
-
-                    let pipe_name_for_open = pipe_name.clone();
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        tokio::task::spawn_blocking(move || {
-                            ClientOptions::new().open(&pipe_name_for_open)
-                        }),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("logs"))?
-                    .map_err(|e| {
-                        super::error::MihomoError::Service(format!(
-                            "Failed to join named pipe connect task: {}",
-                            e
-                        ))
-                    })??;
-                    let mut path = "/logs".to_string();
-                    if let Some(l) = level {
-                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                        serializer.append_pair("level", &l);
-                        path.push('?');
-                        path.push_str(&serializer.finish());
-                    }
-
-                    let ws_url = format!("ws://localhost{}", path);
-                    let request = MihomoClient::ws_request_with_auth(&ws_url, secret.as_deref())?;
-
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("logs"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if tx.send(text.to_string()).is_err() {
-                                        break;
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
-                }
-            }
-        }
-
-        Ok(rx)
-    }
-
-    pub async fn stream_traffic(
-        &self,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<TrafficData>> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-
-        match &self.transport {
-            Transport::Tcp { base_url, .. } => {
-                let mut ws_url = base_url.clone();
-                ws_url
-                    .set_scheme(if ws_url.scheme() == "https" {
-                        "wss"
-                    } else {
-                        "ws"
-                    })
-                    .ok();
-                ws_url.set_path("/traffic");
-
-                let ws_url_str = ws_url.to_string();
-                let request =
-                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
-                let (ws_stream, _) =
-                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
-                        .await
-                        .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                tokio::spawn(async move {
-                    let (_, mut read) = ws_stream.split();
-                    while let Some(msg) = read.next().await {
-                        match msg {
-                            Ok(Message::Text(text)) => {
-                                if let Ok(traffic) =
-                                    serde_json::from_str::<TrafficData>(text.as_ref())
-                                {
-                                    if tx.send(traffic).is_err() {
-                                        break;
-                                    }
-                                }
-                            }
-                            Ok(Message::Close(_)) => break,
-                            Err(_) => break,
-                            _ => {}
-                        }
-                    }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
-                let secret = self.secret.clone();
-
-                #[cfg(unix)]
-                {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
-
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        UnixStream::connect(&socket_path),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                    let request = MihomoClient::ws_request_with_auth(
-                        "ws://localhost/traffic",
-                        secret.as_deref(),
-                    )?;
-
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if let Ok(traffic) =
-                                        serde_json::from_str::<TrafficData>(text.as_ref())
-                                    {
-                                        if tx.send(traffic).is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
-                }
-                #[cfg(windows)]
-                {
-                    use tokio::net::windows::named_pipe::ClientOptions;
-                    use tokio_tungstenite::client_async;
-
-                    let pipe_path = socket_path.to_string_lossy();
-                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                        pipe_path.to_string()
-                    } else {
-                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-                    };
-
-                    let pipe_name_for_open = pipe_name.clone();
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        tokio::task::spawn_blocking(move || {
-                            ClientOptions::new().open(&pipe_name_for_open)
-                        }),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("traffic"))?
-                    .map_err(|e| {
-                        super::error::MihomoError::Service(format!(
-                            "Failed to join named pipe connect task: {}",
-                            e
-                        ))
-                    })??;
-                    let request = MihomoClient::ws_request_with_auth(
-                        "ws://localhost/traffic",
-                        secret.as_deref(),
-                    )?;
-
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if let Ok(traffic) =
-                                        serde_json::from_str::<TrafficData>(text.as_ref())
-                                    {
-                                        if tx.send(traffic).is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
-                }
-            }
-        }
-
-        Ok(rx)
-    }
-
     pub async fn get_memory(&self) -> Result<MemoryData> {
         let response = self.http_request("GET", "/memory", None, None).await?;
         Ok(serde_json::from_slice(&response)?)
@@ -758,165 +167,502 @@ impl MihomoClient {
         log::debug!("Successfully closed connection '{}'", id);
         Ok(())
     }
+}
 
-    pub async fn stream_connections(
-        &self,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+mod http {
+    use super::Result;
+    use crate::core::MihomoError;
+    use std::path::PathBuf;
+    use std::time::Duration;
+    use tokio::io::AsyncRead;
 
-        match &self.transport {
-            Transport::Tcp { base_url, .. } => {
-                let mut ws_url = base_url.clone();
-                ws_url
-                    .set_scheme(if ws_url.scheme() == "https" {
-                        "wss"
-                    } else {
-                        "ws"
-                    })
-                    .ok();
-                ws_url.set_path("/connections");
+    const HTTP_READ_TIMEOUT: Duration = Duration::from_secs(10);
+    const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
 
-                let ws_url_str = ws_url.to_string();
-                let request =
-                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
-                let (ws_stream, _) =
-                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
-                        .await
-                        .map_err(|_| Self::ws_timeout_error("connections"))??;
-                tokio::spawn(async move {
-                    let (_, mut read) = ws_stream.split();
-                    while let Some(msg) = read.next().await {
-                        match msg {
-                            Ok(Message::Text(text)) => {
-                                if let Ok(snapshot) =
-                                    serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
-                                {
-                                    if tx.send(snapshot).is_err() {
-                                        break;
-                                    }
-                                }
-                            }
-                            Ok(Message::Close(_)) => break,
-                            Err(_) => break,
-                            _ => {}
-                        }
-                    }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
-                let secret = self.secret.clone();
+    impl super::MihomoClient {
+        async fn read_http_response<R>(reader: &mut R) -> Result<Vec<u8>>
+        where
+            R: AsyncRead + Unpin,
+        {
+            use tokio::io::AsyncReadExt;
 
-                #[cfg(unix)]
-                {
-                    use tokio::net::UnixStream;
-                    use tokio_tungstenite::client_async;
-
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        UnixStream::connect(&socket_path),
-                    )
+            let mut response = Vec::new();
+            let mut buf = [0u8; 4096];
+            let header_end = loop {
+                let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
                     .await
-                    .map_err(|_| Self::ws_timeout_error("connections"))??;
-                    let request = MihomoClient::ws_request_with_auth(
-                        "ws://localhost/connections",
-                        secret.as_deref(),
-                    )?;
+                    .map_err(|_| {
+                        MihomoError::Service(
+                            "Timeout while reading HTTP response headers".to_string(),
+                        )
+                    })??;
 
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("connections"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if let Ok(snapshot) =
-                                        serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
-                                    {
-                                        if tx.send(snapshot).is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
+                if n == 0 {
+                    return Err(MihomoError::config("Invalid HTTP response"));
                 }
-                #[cfg(windows)]
-                {
-                    use tokio::net::windows::named_pipe::ClientOptions;
-                    use tokio_tungstenite::client_async;
 
-                    let pipe_path = socket_path.to_string_lossy();
-                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                        pipe_path.to_string()
-                    } else {
-                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                response.extend_from_slice(&buf[..n]);
+                if response.len() > MAX_HTTP_HEADER_BYTES {
+                    return Err(MihomoError::config(
+                        "Invalid HTTP response: headers too large",
+                    ));
+                }
+
+                if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break pos + 4;
+                }
+            };
+
+            let headers = &response[..header_end];
+            let headers_text = String::from_utf8_lossy(headers);
+            let status_line = headers_text.lines().next().unwrap_or_default();
+            let status_code = status_line
+                .split_whitespace()
+                .nth(1)
+                .and_then(|code| code.parse::<u16>().ok());
+
+            let content_length = headers_text.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if name.trim().eq_ignore_ascii_case("content-length") {
+                    value.trim().parse::<usize>().ok()
+                } else {
+                    None
+                }
+            });
+
+            let mut body = response[header_end..].to_vec();
+            match content_length {
+                Some(expected) => {
+                    while body.len() < expected {
+                        let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
+                            .await
+                            .map_err(|_| {
+                                MihomoError::Service(
+                                    "Timeout while reading HTTP response body".to_string(),
+                                )
+                            })??;
+                        if n == 0 {
+                            break;
+                        }
+                        body.extend_from_slice(&buf[..n]);
+                    }
+                }
+                None => {
+                    return Err(MihomoError::config(
+                        "Invalid HTTP response: missing Content-Length",
+                    ));
+                }
+            }
+
+            if matches!(status_code, Some(code) if code >= 400) {
+                return Err(MihomoError::Service(format!(
+                    "HTTP error {}: {}",
+                    status_code.unwrap_or_default(),
+                    String::from_utf8_lossy(&body)
+                )));
+            }
+
+            Ok(body)
+        }
+
+        pub(super) async fn http_request(
+            &self,
+            method: &str,
+            path: &str,
+            query: Option<&[(&str, String)]>,
+            body: Option<serde_json::Value>,
+        ) -> Result<Vec<u8>> {
+            match &self.transport {
+                super::Transport::Tcp { client, base_url } => {
+                    let url = base_url.join(path)?;
+                    let mut req = match method {
+                        "GET" => client.get(url),
+                        "PUT" => client.put(url),
+                        "DELETE" => client.delete(url),
+                        _ => return Err(MihomoError::config("Unsupported method")),
                     };
 
-                    let pipe_name_for_open = pipe_name.clone();
-                    let stream = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        tokio::task::spawn_blocking(move || {
-                            ClientOptions::new().open(&pipe_name_for_open)
-                        }),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("connections"))?
-                    .map_err(|e| {
-                        super::error::MihomoError::Service(format!(
-                            "Failed to join named pipe connect task: {}",
-                            e
-                        ))
-                    })??;
-                    let request = MihomoClient::ws_request_with_auth(
-                        "ws://localhost/connections",
-                        secret.as_deref(),
-                    )?;
+                    if let Some(q) = query {
+                        req = req.query(q);
+                    }
+                    if let Some(b) = body {
+                        req = req.json(&b);
+                    }
+                    req = self.add_auth(req);
 
-                    let (ws_stream, _) = tokio::time::timeout(
-                        self.ws_connect_timeout,
-                        client_async(request, stream),
-                    )
-                    .await
-                    .map_err(|_| Self::ws_timeout_error("connections"))??;
-                    tokio::spawn(async move {
-                        let (_, mut read) = ws_stream.split();
-                        while let Some(msg) = read.next().await {
-                            match msg {
-                                Ok(Message::Text(text)) => {
-                                    if let Ok(snapshot) =
-                                        serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
-                                    {
-                                        if tx.send(snapshot).is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                                Ok(Message::Close(_)) => break,
-                                Err(_) => break,
-                                _ => {}
-                            }
-                        }
-                    });
+                    let resp = req.send().await?.error_for_status()?;
+                    Ok(resp.bytes().await?.to_vec())
+                }
+                super::Transport::Unix { socket_path } => {
+                    self.unix_http_request(method, path, query, body, socket_path)
+                        .await
                 }
             }
         }
 
-        Ok(rx)
+        async fn unix_http_request(
+            &self,
+            method: &str,
+            path: &str,
+            query: Option<&[(&str, String)]>,
+            body: Option<serde_json::Value>,
+            socket_path: &PathBuf,
+        ) -> Result<Vec<u8>> {
+            use tokio::io::AsyncWriteExt;
+
+            #[cfg(unix)]
+            {
+                use tokio::net::UnixStream;
+                let mut stream = UnixStream::connect(socket_path).await?;
+
+                let query_str = query
+                    .map(|q| {
+                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                        for (k, v) in q {
+                            serializer.append_pair(k, v);
+                        }
+                        format!("?{}", serializer.finish())
+                    })
+                    .unwrap_or_default();
+
+                let body_str = match body {
+                    Some(b) => serde_json::to_string(&b)?,
+                    None => String::new(),
+                };
+
+                let auth_header = self
+                    .secret
+                    .as_ref()
+                    .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                    .unwrap_or_default();
+
+                let request = format!(
+                    "{} {}{} HTTP/1.1\r\n\
+                     Host: localhost\r\n\
+                     Content-Length: {}\r\n\
+                     Content-Type: application/json\r\n\
+                     {}\r\n\
+                     {}",
+                    method,
+                    path,
+                    query_str,
+                    body_str.len(),
+                    auth_header,
+                    body_str
+                );
+
+                stream.write_all(request.as_bytes()).await?;
+                stream.flush().await?;
+                Self::read_http_response(&mut stream).await
+            }
+            #[cfg(windows)]
+            {
+                use tokio::net::windows::named_pipe::ClientOptions;
+
+                let pipe_path = socket_path.to_string_lossy();
+                let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                    pipe_path.to_string()
+                } else {
+                    format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                };
+
+                let mut stream = ClientOptions::new().open(&pipe_name)?;
+
+                let query_str = query
+                    .map(|q| {
+                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                        for (k, v) in q {
+                            serializer.append_pair(k, v);
+                        }
+                        format!("?{}", serializer.finish())
+                    })
+                    .unwrap_or_default();
+
+                let body_str = match body {
+                    Some(b) => serde_json::to_string(&b)?,
+                    None => String::new(),
+                };
+
+                let auth_header = self
+                    .secret
+                    .as_ref()
+                    .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                    .unwrap_or_default();
+
+                let request = format!(
+                    "{} {}{} HTTP/1.1\r\n\
+                     Host: localhost\r\n\
+                     Content-Length: {}\r\n\
+                     Content-Type: application/json\r\n\
+                     {}\r\n\
+                     {}",
+                    method,
+                    path,
+                    query_str,
+                    body_str.len(),
+                    auth_header,
+                    body_str
+                );
+
+                stream.write_all(request.as_bytes()).await?;
+                stream.flush().await?;
+                Self::read_http_response(&mut stream).await
+            }
+            #[cfg(not(any(unix, windows)))]
+            {
+                let _ = (method, path, query, body, socket_path);
+                Err(MihomoError::config(
+                    "Unix domain sockets are not supported on this platform",
+                ))
+            }
+        }
+
+        fn add_auth(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+            if let Some(secret) = &self.secret {
+                req = req.bearer_auth(secret);
+            }
+            req
+        }
+    }
+}
+
+mod ws {
+    use super::Result;
+    use super::{ConnectionSnapshot, TrafficData};
+    use futures_util::StreamExt;
+    use std::time::Duration;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
+    use url::Url;
+
+    impl super::MihomoClient {
+        pub fn with_ws_connect_timeout(mut self, timeout: Duration) -> Self {
+            self.ws_connect_timeout = timeout.max(Duration::from_millis(1));
+            self
+        }
+
+        pub(super) fn ws_request_with_auth(
+            url: &str,
+            secret: Option<&str>,
+        ) -> std::result::Result<
+            tokio_tungstenite::tungstenite::handshake::client::Request,
+            tokio_tungstenite::tungstenite::Error,
+        > {
+            let mut request = url.into_client_request()?;
+            if let Some(secret) = secret {
+                let header = format!("Bearer {}", secret);
+                if let Ok(value) = header.parse() {
+                    request.headers_mut().insert("Authorization", value);
+                }
+            }
+            Ok(request)
+        }
+
+        fn ws_timeout_error(endpoint: &str) -> crate::core::MihomoError {
+            crate::core::MihomoError::Service(format!("WebSocket connection timeout: {}", endpoint))
+        }
+
+        fn spawn_ws_reader<S, T, F>(
+            ws_stream: tokio_tungstenite::WebSocketStream<S>,
+            tx: tokio::sync::mpsc::UnboundedSender<T>,
+            mut parse_text: F,
+        ) where
+            S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+            T: Send + 'static,
+            F: FnMut(String) -> Option<T> + Send + 'static,
+        {
+            tokio::spawn(async move {
+                let (_, mut read) = ws_stream.split();
+                while let Some(msg) = read.next().await {
+                    match msg {
+                        Ok(Message::Text(text)) => {
+                            if let Some(item) = parse_text(text.to_string()) {
+                                if tx.send(item).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(Message::Close(_)) => break,
+                        Err(_) => break,
+                        _ => {}
+                    }
+                }
+            });
+        }
+
+        fn build_ws_path(endpoint: &str, query: Option<&Vec<(String, String)>>) -> String {
+            let mut path = endpoint.to_string();
+            if let Some(query) = query {
+                let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                for (k, v) in query {
+                    serializer.append_pair(k, v);
+                }
+                path.push('?');
+                path.push_str(&serializer.finish());
+            }
+            path
+        }
+
+        fn build_tcp_ws_url(
+            base_url: &Url,
+            endpoint: &str,
+            query: Option<&Vec<(String, String)>>,
+        ) -> String {
+            let mut ws_url = base_url.clone();
+            ws_url
+                .set_scheme(if ws_url.scheme() == "https" {
+                    "wss"
+                } else {
+                    "ws"
+                })
+                .ok();
+            ws_url.set_path(endpoint);
+            if let Some(query) = query {
+                let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                for (k, v) in query {
+                    serializer.append_pair(k, v);
+                }
+                ws_url.set_query(Some(&serializer.finish()));
+            }
+            ws_url.to_string()
+        }
+
+        async fn stream_with_parser<T, F>(
+            &self,
+            endpoint: &str,
+            query: Option<Vec<(String, String)>>,
+            parser: F,
+        ) -> Result<tokio::sync::mpsc::UnboundedReceiver<T>>
+        where
+            T: Send + 'static,
+            F: FnMut(String) -> Option<T> + Send + Clone + 'static,
+        {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let endpoint_name = endpoint.trim_start_matches('/');
+
+            match &self.transport {
+                super::Transport::Tcp { base_url, .. } => {
+                    let ws_url = Self::build_tcp_ws_url(base_url, endpoint, query.as_ref());
+                    let request = Self::ws_request_with_auth(&ws_url, self.secret.as_deref())?;
+                    let (ws_stream, _) =
+                        tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
+                            .await
+                            .map_err(|_| Self::ws_timeout_error(endpoint_name))??;
+                    Self::spawn_ws_reader(ws_stream, tx, parser);
+                }
+                super::Transport::Unix { socket_path } => {
+                    let socket_path = socket_path.clone();
+                    let secret = self.secret.clone();
+
+                    #[cfg(unix)]
+                    {
+                        use tokio::net::UnixStream;
+                        use tokio_tungstenite::client_async;
+
+                        let stream = tokio::time::timeout(
+                            self.ws_connect_timeout,
+                            UnixStream::connect(&socket_path),
+                        )
+                        .await
+                        .map_err(|_| Self::ws_timeout_error(endpoint_name))??;
+
+                        let path = Self::build_ws_path(endpoint, query.as_ref());
+                        let ws_url = format!("ws://localhost{}", path);
+                        let request = Self::ws_request_with_auth(&ws_url, secret.as_deref())?;
+
+                        let (ws_stream, _) = tokio::time::timeout(
+                            self.ws_connect_timeout,
+                            client_async(request, stream),
+                        )
+                        .await
+                        .map_err(|_| Self::ws_timeout_error(endpoint_name))??;
+                        Self::spawn_ws_reader(ws_stream, tx, parser);
+                    }
+                    #[cfg(windows)]
+                    {
+                        use tokio::net::windows::named_pipe::ClientOptions;
+                        use tokio_tungstenite::client_async;
+
+                        let pipe_path = socket_path.to_string_lossy();
+                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                            pipe_path.to_string()
+                        } else {
+                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                        };
+
+                        let pipe_name_for_open = pipe_name.clone();
+                        let stream = tokio::time::timeout(
+                            self.ws_connect_timeout,
+                            tokio::task::spawn_blocking(move || {
+                                ClientOptions::new().open(&pipe_name_for_open)
+                            }),
+                        )
+                        .await
+                        .map_err(|_| Self::ws_timeout_error(endpoint_name))?
+                        .map_err(|e| {
+                            crate::core::MihomoError::Service(format!(
+                                "Failed to join named pipe connect task: {}",
+                                e
+                            ))
+                        })??;
+
+                        let path = Self::build_ws_path(endpoint, query.as_ref());
+                        let ws_url = format!("ws://localhost{}", path);
+                        let request = Self::ws_request_with_auth(&ws_url, secret.as_deref())?;
+
+                        let (ws_stream, _) = tokio::time::timeout(
+                            self.ws_connect_timeout,
+                            client_async(request, stream),
+                        )
+                        .await
+                        .map_err(|_| Self::ws_timeout_error(endpoint_name))??;
+                        Self::spawn_ws_reader(ws_stream, tx, parser);
+                    }
+                    #[cfg(not(any(unix, windows)))]
+                    {
+                        let _ = (socket_path, secret, query, parser);
+                        return Err(crate::core::MihomoError::config(
+                            "Unix domain sockets are not supported on this platform",
+                        ));
+                    }
+                }
+            }
+
+            Ok(rx)
+        }
+
+        pub async fn stream_logs(
+            &self,
+            level: Option<&str>,
+        ) -> Result<tokio::sync::mpsc::UnboundedReceiver<String>> {
+            let query = level.map(|l| vec![("level".to_string(), l.to_string())]);
+            self.stream_with_parser("/logs", query, Some).await
+        }
+
+        pub async fn stream_traffic(
+            &self,
+        ) -> Result<tokio::sync::mpsc::UnboundedReceiver<TrafficData>> {
+            self.stream_with_parser("/traffic", None, |text| {
+                serde_json::from_str::<TrafficData>(&text).ok()
+            })
+            .await
+        }
+
+        pub async fn stream_connections(
+            &self,
+        ) -> Result<tokio::sync::mpsc::UnboundedReceiver<ConnectionSnapshot>> {
+            self.stream_with_parser("/connections", None, |text| {
+                serde_json::from_str::<ConnectionSnapshot>(&text).ok()
+            })
+            .await
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::StreamExt;
     use mockito::{Matcher, Server};
     #[cfg(unix)]
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1186,7 +932,9 @@ mod tests {
             .mock("GET", "/proxies")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"proxies":{"DIRECT":{"type":"Direct","udp":true,"now":"","all":[],"history":[]}}}"#)
+            .with_body(
+                r#"{"proxies":{"DIRECT":{"type":"Direct","udp":true,"now":"","all":[],"history":[]}}}"#,
+            )
             .create_async()
             .await;
 
