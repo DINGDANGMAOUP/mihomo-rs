@@ -68,6 +68,22 @@ async fn get_external_controller_normalizes_colon_and_http_https() {
         .await
         .expect("get https controller");
     assert_eq!(https, "https://example.com:18443");
+
+    cm.save(
+        "invalid-scheme",
+        "port: 7890\nexternal-controller: \"://invalid\"\n",
+    )
+    .await
+    .expect("save invalid-scheme config");
+    cm.set_current("invalid-scheme")
+        .await
+        .expect("set invalid-scheme config");
+    assert!(matches!(
+        cm.get_external_controller()
+            .await
+            .expect_err("invalid scheme should fail"),
+        MihomoError::Config(_)
+    ));
 }
 
 #[tokio::test]
@@ -82,7 +98,9 @@ async fn ensure_external_controller_updates_local_http_without_port_and_occupied
     )
     .await
     .expect("save no-port config");
-    cm.set_current("no-port").await.expect("set no-port profile");
+    cm.set_current("no-port")
+        .await
+        .expect("set no-port profile");
 
     let updated = cm
         .ensure_external_controller()

@@ -3,9 +3,10 @@ use mihomo_rs::{
     VersionManager,
 };
 use std::env;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 use tempfile::tempdir;
 use tokio::fs;
+use tokio::sync::Mutex;
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -14,7 +15,7 @@ fn env_lock() -> &'static Mutex<()> {
 
 #[tokio::test]
 async fn top_level_entrypoints_and_home_resolution_are_exercised() {
-    let _guard = env_lock().lock().expect("lock env");
+    let _guard = env_lock().lock().await;
 
     let temp = tempdir().expect("create temp dir");
     let temp_home = temp.path().to_path_buf();
@@ -67,7 +68,7 @@ async fn top_level_entrypoints_and_home_resolution_are_exercised() {
 
 #[tokio::test]
 async fn top_level_switch_proxy_reaches_client_creation_error_path() {
-    let _guard = env_lock().lock().expect("lock env");
+    let _guard = env_lock().lock().await;
 
     let temp = tempdir().expect("create temp dir");
     let home = temp.path().to_path_buf();
@@ -89,7 +90,7 @@ async fn top_level_switch_proxy_reaches_client_creation_error_path() {
         .expect_err("invalid controller url should fail");
     assert!(matches!(
         err,
-        MihomoError::UrlParse(_) | MihomoError::Http(_)
+        MihomoError::Config(_) | MihomoError::UrlParse(_) | MihomoError::Http(_)
     ));
 
     if let Some(value) = old_home {
@@ -101,7 +102,7 @@ async fn top_level_switch_proxy_reaches_client_creation_error_path() {
 
 #[tokio::test]
 async fn manager_new_entrypoints_use_mihomo_home_env() {
-    let _guard = env_lock().lock().expect("lock env");
+    let _guard = env_lock().lock().await;
 
     let temp = tempdir().expect("create temp dir");
     let home = temp.path().to_path_buf();

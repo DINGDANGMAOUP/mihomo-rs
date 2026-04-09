@@ -179,8 +179,14 @@ mod tests {
 
         let listed = manager.list().await.expect("list");
         assert_eq!(listed.len(), 1);
-        assert_eq!(manager.get_all().await.expect("get_all").connections.len(), 1);
-        assert_eq!(manager.filter_by_host("example").await.expect("host").len(), 1);
+        assert_eq!(
+            manager.get_all().await.expect("get_all").connections.len(),
+            1
+        );
+        assert_eq!(
+            manager.filter_by_host("example").await.expect("host").len(),
+            1
+        );
         assert_eq!(
             manager
                 .filter_by_process("Safari")
@@ -189,14 +195,20 @@ mod tests {
                 .len(),
             1
         );
-        assert_eq!(manager.filter_by_rule("MATCH").await.expect("rule").len(), 1);
+        assert_eq!(
+            manager.filter_by_rule("MATCH").await.expect("rule").len(),
+            1
+        );
         assert_eq!(
             manager.get_statistics().await.expect("statistics"),
             (34, 12, 1)
         );
 
         manager.close("c1").await.expect("close one");
-        assert_eq!(manager.close_by_host("example").await.expect("close host"), 1);
+        assert_eq!(
+            manager.close_by_host("example").await.expect("close host"),
+            1
+        );
 
         list_mock.assert_async().await;
         close_mock.assert_async().await;

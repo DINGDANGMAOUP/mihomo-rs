@@ -1,4 +1,25 @@
+use crate::core::{validate_profile_name, validate_version_name};
 use clap::{Parser, Subcommand};
+
+fn parse_profile_arg(value: &str) -> std::result::Result<String, String> {
+    validate_profile_name(value)
+        .map(|_| value.to_string())
+        .map_err(|_| format!("Invalid profile name '{}'", value))
+}
+
+fn parse_version_arg(value: &str) -> std::result::Result<String, String> {
+    validate_version_name(value)
+        .map(|_| value.to_string())
+        .map_err(|_| format!("Invalid version '{}'", value))
+}
+
+fn parse_install_target(value: &str) -> std::result::Result<String, String> {
+    let lower = value.to_ascii_lowercase();
+    if matches!(lower.as_str(), "stable" | "beta" | "nightly" | "alpha") {
+        return Ok(value.to_string());
+    }
+    parse_version_arg(value)
+}
 
 #[derive(Parser)]
 #[command(name = "mihomo-rs")]
@@ -15,7 +36,10 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "Install mihomo kernel version")]
     Install {
-        #[arg(help = "Version to install (e.g., v1.18.0) or channel (stable/beta/nightly)")]
+        #[arg(
+            help = "Version to install (e.g., v1.18.0) or channel (stable/beta/nightly)",
+            value_parser = parse_install_target
+        )]
         version: Option<String>,
     },
 
@@ -24,7 +48,7 @@ pub enum Commands {
 
     #[command(about = "Set default version")]
     Default {
-        #[arg(help = "Version to set as default")]
+        #[arg(help = "Version to set as default", value_parser = parse_version_arg)]
         version: String,
     },
 
@@ -39,7 +63,7 @@ pub enum Commands {
 
     #[command(about = "Uninstall a version")]
     Uninstall {
-        #[arg(help = "Version to uninstall")]
+        #[arg(help = "Version to uninstall", value_parser = parse_version_arg)]
         version: String,
     },
 
@@ -97,21 +121,61 @@ pub enum ConfigAction {
 
     #[command(about = "Switch to a profile")]
     Use {
-        #[arg(help = "Profile name")]
+        #[arg(help = "Profile name", value_parser = parse_profile_arg)]
         profile: String,
     },
 
     #[command(about = "Show config content")]
     Show {
-        #[arg(help = "Profile name (default: current)")]
+        #[arg(help = "Profile name (default: current)", value_parser = parse_profile_arg)]
         profile: Option<String>,
     },
 
     #[command(about = "Delete a profile")]
     Delete {
-        #[arg(help = "Profile name")]
+        #[arg(help = "Profile name", value_parser = parse_profile_arg)]
         profile: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands, ConfigAction};
+    use clap::Parser;
+
+    #[test]
+    fn cli_rejects_invalid_profile_argument() {
+        let parsed = Cli::try_parse_from(["mihomo-rs", "config", "use", "../evil"]);
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn cli_rejects_invalid_version_argument() {
+        let parsed = Cli::try_parse_from(["mihomo-rs", "default", "../v1"]);
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn cli_accepts_channel_install_target() {
+        let parsed =
+            Cli::try_parse_from(["mihomo-rs", "install", "stable"]).expect("channel should parse");
+        match parsed.command {
+            Commands::Install { version } => assert_eq!(version.as_deref(), Some("stable")),
+            _ => panic!("expected install command"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_valid_profile_argument() {
+        let parsed = Cli::try_parse_from(["mihomo-rs", "config", "show", "alpha-1.2_ok"])
+            .expect("valid profile should parse");
+        match parsed.command {
+            Commands::Config {
+                action: ConfigAction::Show { profile },
+            } => assert_eq!(profile.as_deref(), Some("alpha-1.2_ok")),
+            _ => panic!("expected config show command"),
+        }
+    }
 }
 
 #[derive(Subcommand)]

@@ -81,7 +81,10 @@ async fn https_scheme_uses_wss_branch_and_fails_fast() {
         MihomoError::WebSocket(_) | MihomoError::Service(_)
     ));
     assert!(matches!(
-        client.stream_traffic().await.expect_err("traffic should fail"),
+        client
+            .stream_traffic()
+            .await
+            .expect_err("traffic should fail"),
         MihomoError::WebSocket(_) | MihomoError::Service(_)
     ));
     assert!(matches!(
@@ -117,7 +120,7 @@ async fn unix_http_invalid_response_and_non_numeric_status_are_handled() {
         .await
         .expect_err("malformed unix response should fail");
     match err {
-        MihomoError::Config(msg) => assert_eq!(msg, "Invalid HTTP response"),
+        MihomoError::Config(msg) => assert_eq!(msg.as_str(), "Invalid HTTP response"),
         other => panic!("expected config error, got: {}", other),
     }
     let _ = std::fs::remove_file(&invalid_socket);
@@ -274,12 +277,10 @@ async fn unix_websocket_binary_and_close_messages_are_ignored() {
     });
     let client = MihomoClient::new(logs_socket.to_str().expect("socket path"), None).unwrap();
     let mut rx = client.stream_logs(None).await.expect("stream logs");
-    assert!(
-        tokio::time::timeout(Duration::from_secs(1), rx.recv())
-            .await
-            .expect("recv timeout")
-            .is_none()
-    );
+    assert!(tokio::time::timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("recv timeout")
+        .is_none());
     let _ = std::fs::remove_file(&logs_socket);
 
     let traffic_socket = unique_socket_path("unix-traffic-binary-close");
@@ -296,12 +297,10 @@ async fn unix_websocket_binary_and_close_messages_are_ignored() {
     });
     let client = MihomoClient::new(traffic_socket.to_str().expect("socket path"), None).unwrap();
     let mut rx = client.stream_traffic().await.expect("stream traffic");
-    assert!(
-        tokio::time::timeout(Duration::from_secs(1), rx.recv())
-            .await
-            .expect("recv timeout")
-            .is_none()
-    );
+    assert!(tokio::time::timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("recv timeout")
+        .is_none());
     let _ = std::fs::remove_file(&traffic_socket);
 
     let conn_socket = unique_socket_path("unix-connections-binary-close");
@@ -317,13 +316,14 @@ async fn unix_websocket_binary_and_close_messages_are_ignored() {
         tx.send(WsMessage::Close(None)).await.expect("send close");
     });
     let client = MihomoClient::new(conn_socket.to_str().expect("socket path"), None).unwrap();
-    let mut rx = client.stream_connections().await.expect("stream connections");
-    assert!(
-        tokio::time::timeout(Duration::from_secs(1), rx.recv())
-            .await
-            .expect("recv timeout")
-            .is_none()
-    );
+    let mut rx = client
+        .stream_connections()
+        .await
+        .expect("stream connections");
+    assert!(tokio::time::timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("recv timeout")
+        .is_none());
     let _ = std::fs::remove_file(&conn_socket);
 }
 
@@ -348,12 +348,10 @@ async fn unix_traffic_and_connections_invalid_text_then_close() {
     });
     let client = MihomoClient::new(traffic_socket.to_str().expect("socket path"), None).unwrap();
     let mut rx = client.stream_traffic().await.expect("stream traffic");
-    assert!(
-        tokio::time::timeout(Duration::from_secs(1), rx.recv())
-            .await
-            .expect("recv timeout")
-            .is_none()
-    );
+    assert!(tokio::time::timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("recv timeout")
+        .is_none());
     let _ = std::fs::remove_file(&traffic_socket);
 
     let conn_socket = unique_socket_path("unix-connections-invalid-text");
@@ -369,12 +367,13 @@ async fn unix_traffic_and_connections_invalid_text_then_close() {
         tx.send(WsMessage::Close(None)).await.expect("send close");
     });
     let client = MihomoClient::new(conn_socket.to_str().expect("socket path"), None).unwrap();
-    let mut rx = client.stream_connections().await.expect("stream connections");
-    assert!(
-        tokio::time::timeout(Duration::from_secs(1), rx.recv())
-            .await
-            .expect("recv timeout")
-            .is_none()
-    );
+    let mut rx = client
+        .stream_connections()
+        .await
+        .expect("stream connections");
+    assert!(tokio::time::timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("recv timeout")
+        .is_none());
     let _ = std::fs::remove_file(&conn_socket);
 }

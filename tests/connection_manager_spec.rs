@@ -55,7 +55,10 @@ async fn filter_methods_match_expected_connections() {
         .filter_by_process("Firefox")
         .await
         .expect("filter by process");
-    let by_rule = manager.filter_by_rule("MATCH").await.expect("filter by rule");
+    let by_rule = manager
+        .filter_by_rule("MATCH")
+        .await
+        .expect("filter by rule");
 
     connections_mock.assert_async().await;
 

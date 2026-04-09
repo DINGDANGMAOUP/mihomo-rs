@@ -40,20 +40,29 @@ done
         let manager = ServiceManager::with_pid_file(binary, config, pid_file)
             .with_stop_wait(100, std::time::Duration::from_millis(20));
 
-        assert_eq!(manager.status().await.expect("initial status"), ServiceStatus::Stopped);
+        assert_eq!(
+            manager.status().await.expect("initial status"),
+            ServiceStatus::Stopped
+        );
 
         manager.start().await.expect("start daemon");
         let running = manager.status().await.expect("running status");
         assert!(matches!(running, ServiceStatus::Running(_)));
 
-        let duplicate_start = manager.start().await.expect_err("start should fail when running");
+        let duplicate_start = manager
+            .start()
+            .await
+            .expect_err("start should fail when running");
         match duplicate_start {
             MihomoError::Service(msg) => assert_eq!(msg, "Service is already running"),
             other => panic!("expected service error, got: {}", other),
         }
 
         manager.stop().await.expect("stop daemon");
-        assert_eq!(manager.status().await.expect("stopped status"), ServiceStatus::Stopped);
+        assert_eq!(
+            manager.status().await.expect("stopped status"),
+            ServiceStatus::Stopped
+        );
     }
 
     #[tokio::test]
@@ -132,7 +141,10 @@ done
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
 
-        assert!(settled_stopped, "short-lived process should eventually stop");
+        assert!(
+            settled_stopped,
+            "short-lived process should eventually stop"
+        );
         assert!(!pid_file.exists());
     }
 }

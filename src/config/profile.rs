@@ -15,7 +15,7 @@ impl Profile {
 
     pub async fn validate(&self) -> Result<()> {
         if !self.path.exists() {
-            return Err(crate::core::MihomoError::Config(format!(
+            return Err(crate::core::MihomoError::config(format!(
                 "Profile file does not exist: {}",
                 self.path.display()
             )));

@@ -105,10 +105,16 @@ pub fn mock_connections_payload() -> &'static str {
 }
 
 pub async fn install_fake_version(home: &Path, version: &str) -> PathBuf {
-    let binary_name = if cfg!(windows) { "mihomo.exe" } else { "mihomo" };
+    let binary_name = if cfg!(windows) {
+        "mihomo.exe"
+    } else {
+        "mihomo"
+    };
     let binary_path = home.join("versions").join(version).join(binary_name);
     if let Some(parent) = binary_path.parent() {
-        fs::create_dir_all(parent).await.expect("create version dir");
+        fs::create_dir_all(parent)
+            .await
+            .expect("create version dir");
     }
     fs::write(&binary_path, b"fake-binary")
         .await

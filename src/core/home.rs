@@ -13,7 +13,7 @@ pub fn get_home_dir() -> Result<PathBuf, MihomoError> {
     }
 
     let home = dirs::home_dir()
-        .ok_or_else(|| MihomoError::Config("Could not determine home directory".to_string()))?;
+        .ok_or_else(|| MihomoError::config("Could not determine home directory"))?;
 
     let mihomo_home = home.join(".config/mihomo-rs");
     log::debug!("Using default home: {}", mihomo_home.display());

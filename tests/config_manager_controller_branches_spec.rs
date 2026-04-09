@@ -51,7 +51,9 @@ async fn ensure_external_controller_updates_invalid_format() {
     )
     .await
     .expect("save invalid profile");
-    cm.set_current("invalid").await.expect("set invalid profile");
+    cm.set_current("invalid")
+        .await
+        .expect("set invalid profile");
 
     let controller = cm
         .ensure_external_controller()
@@ -76,12 +78,9 @@ async fn ensure_external_controller_reassigns_occupied_local_port() {
     let home = temp_home_path(&temp);
     let cm = ConfigManager::with_home(home.clone()).expect("create manager");
 
-    cm.save(
-        "local",
-        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
-    )
-    .await
-    .expect("save local profile");
+    cm.save("local", "port: 7890\nexternal-controller: 127.0.0.1:9090\n")
+        .await
+        .expect("save local profile");
     cm.set_current("local").await.expect("set local profile");
 
     let controller = cm

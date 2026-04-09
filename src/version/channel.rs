@@ -58,7 +58,7 @@ async fn fetch_latest_with_base(api_base: &str, channel: Channel) -> Result<Chan
         .send()
         .await?;
     if !resp.status().is_success() {
-        return Err(crate::core::MihomoError::Version(format!(
+        return Err(crate::core::MihomoError::version(format!(
             "GitHub API error: {}",
             resp.status()
         )));
@@ -73,9 +73,7 @@ async fn fetch_latest_with_base(api_base: &str, channel: Channel) -> Result<Chan
             .unwrap_or_default()
             .to_string();
         if tag.is_empty() {
-            return Err(crate::core::MihomoError::Version(
-                "No stable release found".to_string(),
-            ));
+            return Err(crate::core::MihomoError::version("No stable release found"));
         }
         (tag, date)
     } else {
@@ -107,14 +105,14 @@ async fn fetch_latest_with_base(api_base: &str, channel: Channel) -> Result<Chan
                 .unwrap_or_default()
                 .to_string();
             if tag.is_empty() {
-                return Err(crate::core::MihomoError::Version(
-                    "Invalid release data: empty tag_name".to_string(),
+                return Err(crate::core::MihomoError::version(
+                    "Invalid release data: empty tag_name",
                 ));
             }
             (tag, date)
         } else {
-            return Err(crate::core::MihomoError::Version(
-                "No releases found for selected channel".to_string(),
+            return Err(crate::core::MihomoError::version(
+                "No releases found for selected channel",
             ));
         }
     };
@@ -144,15 +142,14 @@ async fn fetch_releases_with_base(api_base: &str, limit: usize) -> Result<Vec<Re
     let resp = client
         .get(format!(
             "{}/repos/MetaCubeX/mihomo/releases?per_page={}",
-            api_base,
-            limit
+            api_base, limit
         ))
         .header("User-Agent", "mihomo-rs")
         .send()
         .await?;
 
     if !resp.status().is_success() {
-        return Err(crate::core::MihomoError::Version(format!(
+        return Err(crate::core::MihomoError::version(format!(
             "GitHub API error: {}",
             resp.status()
         )));

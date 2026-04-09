@@ -7,6 +7,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
+use tokio::io::AsyncRead;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
@@ -26,6 +27,8 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'|')
     .add(b'}');
+const HTTP_READ_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
 
 #[derive(Clone)]
 enum Transport {
@@ -41,6 +44,91 @@ pub struct MihomoClient {
 }
 
 impl MihomoClient {
+    async fn read_http_response<R>(reader: &mut R) -> Result<Vec<u8>>
+    where
+        R: AsyncRead + Unpin,
+    {
+        use tokio::io::AsyncReadExt;
+
+        let mut response = Vec::new();
+        let mut buf = [0u8; 4096];
+        let header_end = loop {
+            let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
+                .await
+                .map_err(|_| {
+                    super::error::MihomoError::Service(
+                        "Timeout while reading HTTP response headers".to_string(),
+                    )
+                })??;
+
+            if n == 0 {
+                return Err(super::error::MihomoError::config("Invalid HTTP response"));
+            }
+
+            response.extend_from_slice(&buf[..n]);
+            if response.len() > MAX_HTTP_HEADER_BYTES {
+                return Err(super::error::MihomoError::config(
+                    "Invalid HTTP response: headers too large",
+                ));
+            }
+
+            if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+                break pos + 4;
+            }
+        };
+
+        let headers = &response[..header_end];
+        let headers_text = String::from_utf8_lossy(headers);
+        let status_line = headers_text.lines().next().unwrap_or_default();
+        let status_code = status_line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|code| code.parse::<u16>().ok());
+
+        let content_length = headers_text.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                value.trim().parse::<usize>().ok()
+            } else {
+                None
+            }
+        });
+
+        let mut body = response[header_end..].to_vec();
+        match content_length {
+            Some(expected) => {
+                while body.len() < expected {
+                    let n = tokio::time::timeout(HTTP_READ_TIMEOUT, reader.read(&mut buf))
+                        .await
+                        .map_err(|_| {
+                            super::error::MihomoError::Service(
+                                "Timeout while reading HTTP response body".to_string(),
+                            )
+                        })??;
+                    if n == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&buf[..n]);
+                }
+            }
+            None => {
+                return Err(super::error::MihomoError::config(
+                    "Invalid HTTP response: missing Content-Length",
+                ));
+            }
+        }
+
+        if matches!(status_code, Some(code) if code >= 400) {
+            return Err(super::error::MihomoError::Service(format!(
+                "HTTP error {}: {}",
+                status_code.unwrap_or_default(),
+                String::from_utf8_lossy(&body)
+            )));
+        }
+
+        Ok(body)
+    }
+
     pub fn new(base_url: &str, secret: Option<String>) -> Result<Self> {
         let transport = if base_url.starts_with('/')
             || base_url.starts_with("unix://")
@@ -79,11 +167,7 @@ impl MihomoClient {
                     "GET" => client.get(url),
                     "PUT" => client.put(url),
                     "DELETE" => client.delete(url),
-                    _ => {
-                        return Err(super::error::MihomoError::Config(
-                            "Unsupported method".into(),
-                        ))
-                    }
+                    _ => return Err(super::error::MihomoError::config("Unsupported method")),
                 };
 
                 if let Some(q) = query {
@@ -112,7 +196,7 @@ impl MihomoClient {
         body: Option<serde_json::Value>,
         socket_path: &PathBuf,
     ) -> Result<Vec<u8>> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::io::AsyncWriteExt;
 
         #[cfg(unix)]
         {
@@ -157,31 +241,7 @@ impl MihomoClient {
 
             stream.write_all(request.as_bytes()).await?;
             stream.flush().await?;
-
-            let mut response = Vec::new();
-            stream.read_to_end(&mut response).await?;
-
-            let response_str = String::from_utf8_lossy(&response);
-            let status_line = response_str.lines().next().unwrap_or_default().to_string();
-            if let Some(pos) = response_str.find("\r\n\r\n") {
-                let body_bytes = response[pos + 4..].to_vec();
-                if let Some(code_str) = status_line.split_whitespace().nth(1) {
-                    if let Ok(code) = code_str.parse::<u16>() {
-                        if code >= 400 {
-                            return Err(super::error::MihomoError::Service(format!(
-                                "HTTP error {}: {}",
-                                code,
-                                String::from_utf8_lossy(&body_bytes)
-                            )));
-                        }
-                    }
-                }
-                Ok(body_bytes)
-            } else {
-                Err(super::error::MihomoError::Config(
-                    "Invalid HTTP response".into(),
-                ))
-            }
+            Self::read_http_response(&mut stream).await
         }
         #[cfg(windows)]
         {
@@ -234,37 +294,13 @@ impl MihomoClient {
 
             stream.write_all(request.as_bytes()).await?;
             stream.flush().await?;
-
-            let mut response = Vec::new();
-            stream.read_to_end(&mut response).await?;
-
-            let response_str = String::from_utf8_lossy(&response);
-            let status_line = response_str.lines().next().unwrap_or_default().to_string();
-            if let Some(pos) = response_str.find("\r\n\r\n") {
-                let body_bytes = response[pos + 4..].to_vec();
-                if let Some(code_str) = status_line.split_whitespace().nth(1) {
-                    if let Ok(code) = code_str.parse::<u16>() {
-                        if code >= 400 {
-                            return Err(super::error::MihomoError::Service(format!(
-                                "HTTP error {}: {}",
-                                code,
-                                String::from_utf8_lossy(&body_bytes)
-                            )));
-                        }
-                    }
-                }
-                Ok(body_bytes)
-            } else {
-                Err(super::error::MihomoError::Config(
-                    "Invalid HTTP response".into(),
-                ))
-            }
+            Self::read_http_response(&mut stream).await
         }
         #[cfg(not(any(unix, windows)))]
         {
             let _ = (method, path, query, body, socket_path);
-            Err(super::error::MihomoError::Config(
-                "Unix domain sockets are not supported on this platform".into(),
+            Err(super::error::MihomoError::config(
+                "Unix domain sockets are not supported on this platform",
             ))
         }
     }
@@ -593,8 +629,10 @@ impl MihomoClient {
                     )
                     .await
                     .map_err(|_| Self::ws_timeout_error("traffic"))??;
-                    let request =
-                        MihomoClient::ws_request_with_auth("ws://localhost/traffic", secret.as_deref())?;
+                    let request = MihomoClient::ws_request_with_auth(
+                        "ws://localhost/traffic",
+                        secret.as_deref(),
+                    )?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -649,8 +687,10 @@ impl MihomoClient {
                             e
                         ))
                     })??;
-                    let request =
-                        MihomoClient::ws_request_with_auth("ws://localhost/traffic", secret.as_deref())?;
+                    let request = MihomoClient::ws_request_with_auth(
+                        "ws://localhost/traffic",
+                        secret.as_deref(),
+                    )?;
 
                     let (ws_stream, _) = tokio::time::timeout(
                         self.ws_connect_timeout,
@@ -880,12 +920,12 @@ mod tests {
     use mockito::{Matcher, Server};
     #[cfg(unix)]
     use std::time::{SystemTime, UNIX_EPOCH};
+    #[cfg(unix)]
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     #[cfg(unix)]
     use tokio::net::UnixListener;
     use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
-    #[cfg(unix)]
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn test_client_new() {
@@ -1382,11 +1422,9 @@ mod tests {
 
     #[test]
     fn test_ws_request_with_invalid_header_value_is_ignored() {
-        let request = MihomoClient::ws_request_with_auth(
-            "ws://127.0.0.1:9090/logs",
-            Some("bad\r\nsecret"),
-        )
-        .expect("request should still be built");
+        let request =
+            MihomoClient::ws_request_with_auth("ws://127.0.0.1:9090/logs", Some("bad\r\nsecret"))
+                .expect("request should still be built");
         assert!(request.headers().get("Authorization").is_none());
     }
 
@@ -1515,10 +1553,7 @@ mod tests {
             Some("secret-token".to_string()),
         )
         .unwrap();
-        let mut rx = client
-            .stream_traffic()
-            .await
-            .expect("unix traffic stream");
+        let mut rx = client.stream_traffic().await.expect("unix traffic stream");
         let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
             .await
             .expect("recv timeout")

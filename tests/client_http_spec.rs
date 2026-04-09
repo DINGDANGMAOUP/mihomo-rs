@@ -41,7 +41,10 @@ async fn get_proxy_and_switch_proxy_use_encoded_path() {
 
     let switch_mock = server
         .mock("PUT", "/proxies/GLOBAL%20SELECT")
-        .match_header("content-type", Matcher::Regex("application/json".to_string()))
+        .match_header(
+            "content-type",
+            Matcher::Regex("application/json".to_string()),
+        )
         .match_body(Matcher::JsonString(r#"{"name":"JP-01"}"#.to_string()))
         .with_status(204)
         .create_async()
@@ -231,11 +234,17 @@ async fn endpoints_return_error_on_invalid_json_payload() {
 
     let client = MihomoClient::new(&server.url(), None).expect("create client");
     assert!(matches!(
-        client.get_version().await.expect_err("version invalid json"),
+        client
+            .get_version()
+            .await
+            .expect_err("version invalid json"),
         MihomoError::Json(_)
     ));
     assert!(matches!(
-        client.get_proxies().await.expect_err("proxies invalid json"),
+        client
+            .get_proxies()
+            .await
+            .expect_err("proxies invalid json"),
         MihomoError::Json(_)
     ));
     assert!(matches!(
@@ -321,10 +330,9 @@ async fn websocket_invalid_messages_are_ignored_then_close() {
         .stream_traffic()
         .await
         .expect("stream traffic");
-    let traffic_result =
-        tokio::time::timeout(std::time::Duration::from_secs(1), traffic_rx.recv())
-            .await
-            .expect("traffic recv timeout");
+    let traffic_result = tokio::time::timeout(std::time::Duration::from_secs(1), traffic_rx.recv())
+        .await
+        .expect("traffic recv timeout");
     assert!(traffic_result.is_none());
 
     let conn_listener = TcpListener::bind("127.0.0.1:0")

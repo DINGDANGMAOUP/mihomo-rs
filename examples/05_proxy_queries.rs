@@ -14,7 +14,11 @@ async fn main() -> Result<()> {
     println!("nodes: {}", nodes.len());
 
     if let Some(group) = groups.first() {
-        println!("group {} current={}", group.name, pm.get_current(&group.name).await?);
+        println!(
+            "group {} current={}",
+            group.name,
+            pm.get_current(&group.name).await?
+        );
     }
 
     Ok(())

@@ -1,5 +1,8 @@
 use super::profile::Profile;
-use crate::core::{find_available_port, get_home_dir, is_port_available, MihomoError, Result};
+use crate::core::{
+    find_available_port, get_home_dir, is_port_available, validate_profile_name, ErrorCode,
+    MihomoError, Result,
+};
 use std::path::PathBuf;
 use tokio::fs;
 use url::Url;
@@ -10,6 +13,13 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    fn invalid_external_controller_error(controller: &str) -> MihomoError {
+        MihomoError::config_with_code(
+            ErrorCode::InvalidExternalController,
+            format!("Invalid external-controller value '{}'", controller),
+        )
+    }
+
     pub fn new() -> Result<Self> {
         let home = get_home_dir()?;
         Self::with_home(home)
@@ -26,6 +36,7 @@ impl ConfigManager {
     }
 
     pub async fn load(&self, profile: &str) -> Result<String> {
+        validate_profile_name(profile)?;
         let path = self.config_dir.join(format!("{}.yaml", profile));
         if !path.exists() {
             return Err(MihomoError::NotFound(format!(
@@ -39,6 +50,7 @@ impl ConfigManager {
     }
 
     pub async fn save(&self, profile: &str, content: &str) -> Result<()> {
+        validate_profile_name(profile)?;
         fs::create_dir_all(&self.config_dir).await?;
 
         serde_yaml::from_str::<serde_yaml::Value>(content)?;
@@ -76,6 +88,7 @@ impl ConfigManager {
     }
 
     pub async fn delete_profile(&self, profile: &str) -> Result<()> {
+        validate_profile_name(profile)?;
         let path = self.config_dir.join(format!("{}.yaml", profile));
         if !path.exists() {
             return Err(MihomoError::NotFound(format!(
@@ -86,9 +99,7 @@ impl ConfigManager {
 
         let current = self.get_current().await.ok();
         if current.as_ref() == Some(&profile.to_string()) {
-            return Err(MihomoError::Config(
-                "Cannot delete the active profile".to_string(),
-            ));
+            return Err(MihomoError::config("Cannot delete the active profile"));
         }
 
         fs::remove_file(path).await?;
@@ -96,6 +107,7 @@ impl ConfigManager {
     }
 
     pub async fn set_current(&self, profile: &str) -> Result<()> {
+        validate_profile_name(profile)?;
         let path = self.config_dir.join(format!("{}.yaml", profile));
         if !path.exists() {
             return Err(MihomoError::NotFound(format!(
@@ -111,7 +123,7 @@ impl ConfigManager {
         let mut config = if self.settings_file.exists() {
             let content = fs::read_to_string(&self.settings_file).await?;
             toml::from_str(&content)
-                .map_err(|e| MihomoError::Config(format!("Invalid config: {}", e)))?
+                .map_err(|e| MihomoError::config(format!("Invalid config: {}", e)))?
         } else {
             toml::Value::Table(toml::map::Map::new())
         };
@@ -130,7 +142,7 @@ impl ConfigManager {
         }
 
         let content = toml::to_string(&config)
-            .map_err(|e| MihomoError::Config(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| MihomoError::config(format!("Failed to serialize config: {}", e)))?;
         fs::write(&self.settings_file, content).await?;
 
         Ok(())
@@ -143,7 +155,7 @@ impl ConfigManager {
 
         let content = fs::read_to_string(&self.settings_file).await?;
         let config: toml::Value = toml::from_str(&content)
-            .map_err(|e| MihomoError::Config(format!("Invalid config: {}", e)))?;
+            .map_err(|e| MihomoError::config(format!("Invalid config: {}", e)))?;
 
         Ok(config
             .get("default")
@@ -155,19 +167,21 @@ impl ConfigManager {
 
     pub async fn get_current_path(&self) -> Result<PathBuf> {
         let profile = self.get_current().await?;
+        validate_profile_name(&profile)?;
         Ok(self.config_dir.join(format!("{}.yaml", profile)))
     }
 
     /// Ensure a default config file exists, create one if it doesn't
     pub async fn ensure_default_config(&self) -> Result<()> {
         let profile = self.get_current().await?;
+        validate_profile_name(&profile)?;
         let path = self.config_dir.join(format!("{}.yaml", profile));
 
         if !path.exists() {
             log::info!("Default config '{}' not found, creating...", profile);
 
             let port = find_available_port(9090).ok_or_else(|| {
-                MihomoError::Config("No available ports found in range 9090-9190".to_string())
+                MihomoError::config("No available ports found in range 9090-9190")
             })?;
 
             let default_config = format!(
@@ -201,19 +215,7 @@ external-controller: 127.0.0.1:{}
             .and_then(|v| v.as_str())
             .unwrap_or("127.0.0.1:9090");
 
-        // Detect Unix socket paths
-        if controller.starts_with('/') || controller.starts_with("unix://") {
-            log::debug!("Detected Unix socket path: {}", controller);
-            return Ok(controller.to_string());
-        }
-
-        let url = if controller.starts_with(':') {
-            format!("http://127.0.0.1{}", controller)
-        } else if controller.starts_with("http://") || controller.starts_with("https://") {
-            controller.to_string()
-        } else {
-            format!("http://{}", controller)
-        };
+        let url = Self::normalize_external_controller(controller)?;
 
         log::debug!("External controller URL: {}", url);
         Ok(url)
@@ -230,49 +232,39 @@ external-controller: 127.0.0.1:{}
             Some(controller) => {
                 if controller.starts_with('/') || controller.starts_with("unix://") {
                     false
-                } else if controller.starts_with("http://") || controller.starts_with("https://") {
-                    match Url::parse(controller) {
-                        Ok(url) => {
-                            let host = url.host_str().unwrap_or_default();
-                            let port = url.port_or_known_default();
-                            if Self::is_local_controller_host(host) {
-                                match port {
-                                    Some(p) => !is_port_available(p),
-                                    None => true,
-                                }
-                            } else {
-                                false
-                            }
-                        }
-                        Err(_) => {
-                            log::warn!("Invalid external-controller URL: {}", controller);
-                            true
-                        }
-                    }
                 } else {
-                    // Parse the port from plain controller address
-                    let addr = if controller.starts_with(':') {
-                        format!("127.0.0.1{}", controller)
+                    let has_explicit_scheme =
+                        controller.starts_with("http://") || controller.starts_with("https://");
+                    if !has_explicit_scheme
+                        && !controller.starts_with(':')
+                        && !controller.contains(':')
+                    {
+                        log::warn!(
+                            "Invalid external-controller value without port: {}",
+                            controller
+                        );
+                        true
                     } else {
-                        controller.to_string()
-                    };
-
-                    match Self::extract_host_port(&addr) {
-                        Some((host, port)) => {
-                            if Self::is_local_controller_host(&host) {
-                                if !is_port_available(port) {
-                                    log::warn!("Port {} is occupied, finding alternative", port);
-                                    true
+                        match Self::normalize_external_controller(controller)
+                            .ok()
+                            .and_then(|normalized| Url::parse(&normalized).ok())
+                        {
+                            Some(url) => {
+                                let host = url.host_str().unwrap_or_default();
+                                let port = url.port_or_known_default();
+                                if Self::is_local_controller_host(host) {
+                                    match port {
+                                        Some(p) => !is_port_available(p),
+                                        None => true,
+                                    }
                                 } else {
                                     false
                                 }
-                            } else {
-                                false
                             }
-                        }
-                        None => {
-                            log::warn!("Invalid external-controller format: {}", controller);
-                            true
+                            None => {
+                                log::warn!("Invalid external-controller value: {}", controller);
+                                true
+                            }
                         }
                     }
                 }
@@ -285,7 +277,7 @@ external-controller: 127.0.0.1:{}
 
         if needs_update {
             let port = find_available_port(9090).ok_or_else(|| {
-                MihomoError::Config("No available ports found in range 9090-9190".to_string())
+                MihomoError::config("No available ports found in range 9090-9190")
             })?;
 
             let controller_addr = format!("127.0.0.1:{}", port);
@@ -311,11 +303,43 @@ external-controller: 127.0.0.1:{}
         matches!(host, "127.0.0.1" | "localhost" | "0.0.0.0" | "::1")
     }
 
-    fn extract_host_port(addr: &str) -> Option<(String, u16)> {
-        let url = Url::parse(&format!("http://{}", addr)).ok()?;
-        let host = url.host_str()?.to_string();
-        let port = url.port()?;
-        Some((host, port))
+    fn normalize_external_controller(controller: &str) -> Result<String> {
+        let controller = controller.trim();
+        if controller.is_empty() {
+            return Err(Self::invalid_external_controller_error("<empty>"));
+        }
+
+        if controller.starts_with('/') {
+            return Ok(controller.to_string());
+        }
+        if controller.starts_with("unix://") {
+            if controller.trim_start_matches("unix://").is_empty() {
+                return Err(Self::invalid_external_controller_error(controller));
+            }
+            return Ok(controller.to_string());
+        }
+        if controller.contains("://")
+            && !controller.starts_with("http://")
+            && !controller.starts_with("https://")
+        {
+            return Err(Self::invalid_external_controller_error(controller));
+        }
+
+        let url = if controller.starts_with(':') {
+            format!("http://127.0.0.1{}", controller)
+        } else if controller.starts_with("http://") || controller.starts_with("https://") {
+            controller.to_string()
+        } else {
+            format!("http://{}", controller)
+        };
+
+        let parsed =
+            Url::parse(&url).map_err(|_| Self::invalid_external_controller_error(controller))?;
+        if parsed.host_str().is_none() {
+            return Err(Self::invalid_external_controller_error(controller));
+        }
+
+        Ok(url)
     }
 }
 
@@ -340,14 +364,28 @@ mod tests {
     }
 
     #[test]
-    fn extract_host_port_parses_valid_input_and_rejects_invalid() {
-        let parsed = ConfigManager::extract_host_port("127.0.0.1:9090")
-            .expect("valid host:port should parse");
-        assert_eq!(parsed.0, "127.0.0.1");
-        assert_eq!(parsed.1, 9090);
-
-        assert!(ConfigManager::extract_host_port("localhost").is_none());
-        assert!(ConfigManager::extract_host_port("bad::addr").is_none());
+    fn normalize_external_controller_validates_and_normalizes() {
+        assert_eq!(
+            ConfigManager::normalize_external_controller(":10090").expect("normalize colon"),
+            "http://127.0.0.1:10090"
+        );
+        assert_eq!(
+            ConfigManager::normalize_external_controller("127.0.0.1:9090")
+                .expect("normalize host:port"),
+            "http://127.0.0.1:9090"
+        );
+        assert_eq!(
+            ConfigManager::normalize_external_controller("https://example.com:18443")
+                .expect("keep https"),
+            "https://example.com:18443"
+        );
+        let empty_err = ConfigManager::normalize_external_controller("")
+            .expect_err("empty controller should fail");
+        assert!(empty_err
+            .to_string()
+            .contains("Invalid external-controller value '<empty>'"));
+        assert!(ConfigManager::normalize_external_controller("://invalid").is_err());
+        assert!(ConfigManager::normalize_external_controller("unix://").is_err());
     }
 
     #[test]
@@ -429,7 +467,10 @@ mod tests {
         assert_eq!(profiles.len(), 2);
 
         manager.set_current("beta").await.expect("set beta current");
-        manager.set_current("alpha").await.expect("set alpha current");
+        manager
+            .set_current("alpha")
+            .await
+            .expect("set alpha current");
         assert_eq!(
             manager.get_current().await.expect("read current profile"),
             "alpha"
@@ -438,13 +479,11 @@ mod tests {
             manager.get_current_path().await.expect("current path"),
             manager.config_dir.join("alpha.yaml")
         );
-        assert!(
-            manager
-                .ensure_external_controller()
-                .await
-                .expect("ensure external controller")
-                .starts_with("http://127.0.0.1:")
-        );
+        assert!(manager
+            .ensure_external_controller()
+            .await
+            .expect("ensure external controller")
+            .starts_with("http://127.0.0.1:"));
 
         manager
             .delete_profile("beta")

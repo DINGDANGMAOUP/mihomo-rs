@@ -1,5 +1,7 @@
 use clap::Parser;
-use mihomo_rs::cli::{print_error, print_info, print_success, print_table, Cli, Commands};
+use mihomo_rs::cli::{
+    format_cli_error, print_error, print_info, print_success, print_table, Cli, Commands,
+};
 use mihomo_rs::config::ConfigManager;
 use mihomo_rs::connection::ConnectionManager;
 use mihomo_rs::core::MihomoClient;
@@ -11,7 +13,7 @@ use std::io::{self, Write};
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
-        print_error(&format!("Error: {}", e));
+        print_error(&format_cli_error(&e));
         std::process::exit(1);
     }
 }

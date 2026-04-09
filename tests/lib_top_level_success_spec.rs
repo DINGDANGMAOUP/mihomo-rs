@@ -31,7 +31,10 @@ done
         let mut server = Server::new_async().await;
         let switch_mock = server
             .mock("PUT", "/proxies/GLOBAL")
-            .match_header("content-type", Matcher::Regex("application/json".to_string()))
+            .match_header(
+                "content-type",
+                Matcher::Regex("application/json".to_string()),
+            )
             .match_body(Matcher::JsonString(r#"{"name":"DIRECT"}"#.to_string()))
             .with_status(204)
             .create_async()
@@ -41,8 +44,12 @@ done
         let home = temp.path();
         let versions = home.join("versions").join("v-test");
         let configs = home.join("configs");
-        fs::create_dir_all(&versions).await.expect("create versions dir");
-        fs::create_dir_all(&configs).await.expect("create configs dir");
+        fs::create_dir_all(&versions)
+            .await
+            .expect("create versions dir");
+        fs::create_dir_all(&configs)
+            .await
+            .expect("create configs dir");
 
         let binary = versions.join("mihomo");
         write_fake_daemon(&binary).await;
@@ -50,10 +57,7 @@ done
         let config_path = configs.join("default.yaml");
         fs::write(
             &config_path,
-            format!(
-                "port: 7890\nexternal-controller: {}\n",
-                server.url()
-            ),
+            format!("port: 7890\nexternal-controller: {}\n", server.url()),
         )
         .await
         .expect("write profile config");

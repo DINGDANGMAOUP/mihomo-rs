@@ -236,7 +236,9 @@ mod tests {
         let file = NamedTempFile::new().expect("create temp file");
         let path = file.path();
 
-        fs::write(path, "not-a-pid").await.expect("write invalid pid");
+        fs::write(path, "not-a-pid")
+            .await
+            .expect("write invalid pid");
         assert!(read_pid_record(path).await.is_err());
 
         fs::write(path, "1234:not-a-start-time")
@@ -250,20 +252,28 @@ mod tests {
         let file = NamedTempFile::new().expect("create temp file");
         let path = file.path().to_path_buf();
 
-        remove_pid_file(&path).await.expect("remove existing pid file");
+        remove_pid_file(&path)
+            .await
+            .expect("remove existing pid file");
         assert!(!path.exists());
 
-        remove_pid_file(&path).await.expect("remove missing pid file");
+        remove_pid_file(&path)
+            .await
+            .expect("remove missing pid file");
     }
 
     #[tokio::test]
     async fn test_spawn_daemon_reports_missing_binary_and_config() {
         let missing_binary = PathBuf::from("/definitely/not/existing/mihomo-bin");
         let missing_config = PathBuf::from("/definitely/not/existing/config.yaml");
-        assert!(spawn_daemon(&missing_binary, &missing_config).await.is_err());
+        assert!(spawn_daemon(&missing_binary, &missing_config)
+            .await
+            .is_err());
 
         let binary_file = NamedTempFile::new().expect("create fake binary");
-        assert!(spawn_daemon(binary_file.path(), &missing_config).await.is_err());
+        assert!(spawn_daemon(binary_file.path(), &missing_config)
+            .await
+            .is_err());
     }
 
     #[cfg(unix)]
@@ -291,7 +301,9 @@ mod tests {
     fn test_kill_process_checked_rejects_mismatched_process_record() {
         let err =
             kill_process_checked(u32::MAX, Some(1)).expect_err("mismatched pid record should fail");
-        assert!(err.to_string().contains("no longer matches tracked process"));
+        assert!(err
+            .to_string()
+            .contains("no longer matches tracked process"));
     }
 
     #[tokio::test]
@@ -308,7 +320,9 @@ mod tests {
         write_pid_record(&nested, 7788, Some(9900))
             .await
             .expect("write pid record into nested path");
-        let record = read_pid_record(&nested).await.expect("read nested pid record");
+        let record = read_pid_record(&nested)
+            .await
+            .expect("read nested pid record");
         assert_eq!(record.pid, 7788);
         assert_eq!(record.start_time, Some(9900));
     }

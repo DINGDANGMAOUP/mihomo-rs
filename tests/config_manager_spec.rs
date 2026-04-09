@@ -60,7 +60,7 @@ async fn delete_profile_rejects_active_profile() {
         .await
         .expect_err("active profile should not be deletable");
     match err {
-        MihomoError::Config(msg) => assert_eq!(msg, "Cannot delete the active profile"),
+        MihomoError::Config(msg) => assert_eq!(msg.as_str(), "Cannot delete the active profile"),
         other => panic!("expected config error, got: {}", other),
     }
 }

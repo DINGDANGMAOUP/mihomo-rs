@@ -19,7 +19,10 @@ async fn list_installed_is_sorted_and_marks_default() {
         .await
         .expect("set default version");
 
-    let versions = manager.list_installed().await.expect("list installed versions");
+    let versions = manager
+        .list_installed()
+        .await
+        .expect("list installed versions");
     let names: Vec<_> = versions.iter().map(|v| v.version.clone()).collect();
 
     assert_eq!(names, vec!["v1.10.0", "v1.9.0", "v1.2.0"]);
@@ -35,13 +38,13 @@ async fn get_default_and_binary_path_work_after_setting_default() {
     let manager = VersionManager::with_home(home.clone()).expect("create version manager");
 
     let binary = install_fake_version(&home, "v2.0.0").await;
-    manager
-        .set_default("v2.0.0")
-        .await
-        .expect("set default");
+    manager.set_default("v2.0.0").await.expect("set default");
 
     let default = manager.get_default().await.expect("get default");
-    let binary_path = manager.get_binary_path(None).await.expect("get binary path");
+    let binary_path = manager
+        .get_binary_path(None)
+        .await
+        .expect("get binary path");
 
     assert_eq!(default, "v2.0.0");
     assert_eq!(binary_path, binary);
@@ -58,10 +61,7 @@ async fn set_default_preserves_existing_profile_field() {
         .await
         .expect("write config with profile");
 
-    manager
-        .set_default("v1.0.0")
-        .await
-        .expect("set default");
+    manager.set_default("v1.0.0").await.expect("set default");
 
     let content = fs::read_to_string(home.join("config.toml"))
         .await
@@ -93,17 +93,16 @@ async fn uninstall_rejects_default_but_removes_non_default() {
     install_fake_version(&home, "v1.0.0").await;
     install_fake_version(&home, "v1.1.0").await;
 
-    manager
-        .set_default("v1.0.0")
-        .await
-        .expect("set default");
+    manager.set_default("v1.0.0").await.expect("set default");
 
     let err = manager
         .uninstall("v1.0.0")
         .await
         .expect_err("cannot uninstall default version");
     match err {
-        MihomoError::Version(msg) => assert_eq!(msg, "Cannot uninstall the default version"),
+        MihomoError::Version(msg) => {
+            assert_eq!(msg.as_str(), "Cannot uninstall the default version")
+        }
         other => panic!("expected version error, got: {}", other),
     }
 
@@ -247,7 +246,7 @@ async fn get_default_errors_when_version_key_missing() {
         .await
         .expect_err("missing default.version should fail");
     match err {
-        MihomoError::Config(msg) => assert_eq!(msg, "No default version in config"),
+        MihomoError::Config(msg) => assert_eq!(msg.as_str(), "No default version in config"),
         other => panic!("expected config error, got: {}", other),
     }
 }

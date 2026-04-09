@@ -32,7 +32,7 @@ impl Downloader {
             .await?;
 
         if !resp.status().is_success() {
-            return Err(MihomoError::Version(format!(
+            return Err(MihomoError::version(format!(
                 "Failed to download version {}: HTTP {}",
                 version,
                 resp.status()
@@ -97,7 +97,7 @@ impl Downloader {
         let mut decompressed = Vec::new();
         decoder
             .read_to_end(&mut decompressed)
-            .map_err(|e| MihomoError::Version(format!("Failed to decompress gz: {}", e)))?;
+            .map_err(|e| MihomoError::version(format!("Failed to decompress gz: {}", e)))?;
         Ok(decompressed)
     }
 
@@ -107,11 +107,11 @@ impl Downloader {
 
         let reader = Cursor::new(bytes);
         let mut archive = ZipArchive::new(reader)
-            .map_err(|e| MihomoError::Version(format!("Failed to open zip archive: {}", e)))?;
+            .map_err(|e| MihomoError::version(format!("Failed to open zip archive: {}", e)))?;
 
         // mihomo zip archives should contain a single binary file
         if archive.len() != 1 {
-            return Err(MihomoError::Version(format!(
+            return Err(MihomoError::version(format!(
                 "Expected 1 file in zip archive, found {}",
                 archive.len()
             )));
@@ -119,11 +119,11 @@ impl Downloader {
 
         let mut file = archive
             .by_index(0)
-            .map_err(|e| MihomoError::Version(format!("Failed to read zip entry: {}", e)))?;
+            .map_err(|e| MihomoError::version(format!("Failed to read zip entry: {}", e)))?;
 
         let mut decompressed = Vec::new();
         file.read_to_end(&mut decompressed)
-            .map_err(|e| MihomoError::Version(format!("Failed to decompress zip: {}", e)))?;
+            .map_err(|e| MihomoError::version(format!("Failed to decompress zip: {}", e)))?;
 
         Ok(decompressed)
     }

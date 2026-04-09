@@ -1,6 +1,6 @@
 use super::channel::{fetch_latest, Channel};
 use super::download::Downloader;
-use crate::core::{get_home_dir, MihomoError, Result};
+use crate::core::{get_home_dir, validate_version_name, ErrorCode, MihomoError, Result};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering as CmpOrdering;
@@ -40,11 +40,17 @@ impl VersionManager {
     }
 
     pub async fn install(&self, version: &str) -> Result<()> {
+        validate_version_name(version).map_err(|_| {
+            MihomoError::version_with_code(
+                ErrorCode::InvalidVersion,
+                format!("Invalid version '{}'", version),
+            )
+        })?;
         fs::create_dir_all(&self.install_dir).await?;
 
         let version_dir = self.install_dir.join(version);
         if version_dir.exists() {
-            return Err(MihomoError::Version(format!(
+            return Err(MihomoError::version(format!(
                 "Version {} is already installed",
                 version
             )));
@@ -146,6 +152,12 @@ impl VersionManager {
     }
 
     pub async fn set_default(&self, version: &str) -> Result<()> {
+        validate_version_name(version).map_err(|_| {
+            MihomoError::version_with_code(
+                ErrorCode::InvalidVersion,
+                format!("Invalid version '{}'", version),
+            )
+        })?;
         let version_dir = self.install_dir.join(version);
         if !version_dir.exists() {
             return Err(MihomoError::NotFound(format!(
@@ -161,7 +173,7 @@ impl VersionManager {
         let mut config = if self.config_file.exists() {
             let content = fs::read_to_string(&self.config_file).await?;
             toml::from_str::<toml::Value>(&content)
-                .map_err(|e| MihomoError::Config(format!("Invalid config: {}", e)))?
+                .map_err(|e| MihomoError::config(format!("Invalid config: {}", e)))?
         } else {
             toml::Value::Table(toml::map::Map::new())
         };
@@ -179,7 +191,7 @@ impl VersionManager {
         }
 
         let content = toml::to_string(&config)
-            .map_err(|e| MihomoError::Config(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| MihomoError::config(format!("Failed to serialize config: {}", e)))?;
         fs::write(&self.config_file, content).await?;
 
         Ok(())
@@ -192,21 +204,34 @@ impl VersionManager {
 
         let content = fs::read_to_string(&self.config_file).await?;
         let config: toml::Value = toml::from_str(&content)
-            .map_err(|e| MihomoError::Config(format!("Invalid config: {}", e)))?;
+            .map_err(|e| MihomoError::config(format!("Invalid config: {}", e)))?;
 
         config
             .get("default")
             .and_then(|d| d.get("version"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| MihomoError::Config("No default version in config".to_string()))
+            .ok_or_else(|| MihomoError::config("No default version in config"))
     }
 
     pub async fn get_binary_path(&self, version: Option<&str>) -> Result<PathBuf> {
         let version = if let Some(v) = version {
+            validate_version_name(v).map_err(|_| {
+                MihomoError::version_with_code(
+                    ErrorCode::InvalidVersion,
+                    format!("Invalid version '{}'", v),
+                )
+            })?;
             v.to_string()
         } else {
-            self.get_default().await?
+            let default = self.get_default().await?;
+            validate_version_name(&default).map_err(|_| {
+                MihomoError::version_with_code(
+                    ErrorCode::InvalidVersion,
+                    format!("Invalid version '{}'", default),
+                )
+            })?;
+            default
         };
 
         let binary_name = if cfg!(windows) {
@@ -227,6 +252,12 @@ impl VersionManager {
     }
 
     pub async fn uninstall(&self, version: &str) -> Result<()> {
+        validate_version_name(version).map_err(|_| {
+            MihomoError::version_with_code(
+                ErrorCode::InvalidVersion,
+                format!("Invalid version '{}'", version),
+            )
+        })?;
         let version_dir = self.install_dir.join(version);
         if !version_dir.exists() {
             return Err(MihomoError::NotFound(format!(
@@ -241,9 +272,7 @@ impl VersionManager {
             Err(err) => return Err(err),
         };
         if default_version.as_ref() == Some(&version.to_string()) {
-            return Err(MihomoError::Version(
-                "Cannot uninstall the default version".to_string(),
-            ));
+            return Err(MihomoError::version("Cannot uninstall the default version"));
         }
 
         fs::remove_dir_all(version_dir).await?;
@@ -381,15 +410,17 @@ mod tests {
         fs::create_dir_all(&version_dir)
             .await
             .expect("create version directory");
-        let binary_name = if cfg!(windows) { "mihomo.exe" } else { "mihomo" };
+        let binary_name = if cfg!(windows) {
+            "mihomo.exe"
+        } else {
+            "mihomo"
+        };
         let binary_path = version_dir.join(binary_name);
         fs::write(&binary_path, b"fake-binary")
             .await
             .expect("write fake binary");
 
-        vm.set_default("v1.2.3")
-            .await
-            .expect("set default version");
+        vm.set_default("v1.2.3").await.expect("set default version");
         let default_version = vm.get_default().await.expect("get default version");
         assert_eq!(default_version, "v1.2.3");
 
@@ -405,14 +436,14 @@ mod tests {
 
         let keep = vm.install_dir.join("v1.0.0");
         let remove = vm.install_dir.join("v1.1.0");
-        fs::create_dir_all(&keep).await.expect("create keep version");
+        fs::create_dir_all(&keep)
+            .await
+            .expect("create keep version");
         fs::create_dir_all(&remove)
             .await
             .expect("create remove version");
 
-        vm.set_default("v1.0.0")
-            .await
-            .expect("set default version");
+        vm.set_default("v1.0.0").await.expect("set default version");
         vm.uninstall("v1.1.0")
             .await
             .expect("uninstall non-default version");
