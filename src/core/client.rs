@@ -1044,18 +1044,25 @@ mod tests {
         });
         let logs_client = MihomoClient::new(&logs_pipe, None).expect("create logs client");
         let mut logs_rx = logs_client.stream_logs(None).await.expect("stream logs");
-        assert!(tokio::time::timeout(std::time::Duration::from_secs(1), logs_rx.recv())
-            .await
-            .expect("logs recv timeout")
-            .is_none());
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), logs_rx.recv())
+                .await
+                .expect("logs recv timeout")
+                .is_none()
+        );
 
         let traffic_pipe = unique_pipe_name("traffic-binary-close");
         let mut traffic_server = ServerOptions::new()
             .create(&traffic_pipe)
             .expect("create traffic named pipe server");
         tokio::spawn(async move {
-            traffic_server.connect().await.expect("connect traffic pipe");
-            let ws = accept_async(traffic_server).await.expect("accept traffic ws");
+            traffic_server
+                .connect()
+                .await
+                .expect("connect traffic pipe");
+            let ws = accept_async(traffic_server)
+                .await
+                .expect("accept traffic ws");
             let (mut tx, _) = ws.split();
             tx.send(WsMessage::Binary(vec![3u8, 4u8].into()))
                 .await
@@ -1069,10 +1076,12 @@ mod tests {
             .stream_traffic()
             .await
             .expect("stream traffic");
-        assert!(tokio::time::timeout(std::time::Duration::from_secs(1), traffic_rx.recv())
-            .await
-            .expect("traffic recv timeout")
-            .is_none());
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), traffic_rx.recv())
+                .await
+                .expect("traffic recv timeout")
+                .is_none()
+        );
 
         let connections_pipe = unique_pipe_name("connections-binary-close");
         let mut connections_server = ServerOptions::new()
