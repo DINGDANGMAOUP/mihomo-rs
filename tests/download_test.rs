@@ -137,6 +137,7 @@ fn test_os_detection_coverage() {
 }
 
 #[tokio::test]
+#[ignore = "requires external network access"]
 async fn test_real_download_linux() -> Result<()> {
     if cfg!(not(target_os = "linux")) {
         println!("⊘ Skipping: not running on Linux");
@@ -167,6 +168,7 @@ async fn test_real_download_linux() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires external network access"]
 async fn test_real_download_macos() -> Result<()> {
     if cfg!(not(target_os = "macos")) {
         println!("⊘ Skipping: not running on macOS");
@@ -195,6 +197,7 @@ async fn test_real_download_macos() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires external network access"]
 async fn test_real_download_windows() -> Result<()> {
     if cfg!(not(target_os = "windows")) {
         println!("⊘ Skipping: not running on Windows");
@@ -223,6 +226,7 @@ async fn test_real_download_windows() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires external network access"]
 async fn test_real_download_invalid_version() -> Result<()> {
     let temp_dir = setup_temp_home();
     let home = get_temp_home_path(&temp_dir);
