@@ -17,7 +17,7 @@ pub struct ServiceManager {
     stop_interval: Duration,
 }
 
-const DEFAULT_STOP_RETRIES: u32 = 20;
+const DEFAULT_STOP_RETRIES: u32 = 50;
 const DEFAULT_STOP_INTERVAL_MS: u64 = 100;
 
 impl ServiceManager {

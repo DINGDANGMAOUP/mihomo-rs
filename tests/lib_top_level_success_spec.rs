@@ -10,9 +10,7 @@ mod unix_tests {
     async fn write_fake_daemon(binary: &std::path::Path) {
         let script = r#"#!/bin/sh
 trap 'exit 0' TERM INT
-while true; do
-  sleep 1
-done
+while true; do :; done
 "#;
         fs::write(binary, script).await.expect("write fake daemon");
 

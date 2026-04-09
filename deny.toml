@@ -21,12 +21,3 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
-
-[licenses]
-version = 2
-confidence-threshold = 0.8
-allow = []
-deny = []
-copyleft = "warn"
-default = "warn"
-private = { ignore = true }
