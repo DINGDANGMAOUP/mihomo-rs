@@ -21,7 +21,7 @@ serde_yaml = "0.9"
 thiserror = "2.0"
 anyhow = "1.0"
 tokio-util = { version = "0.7", features = ["io"] }
-sysinfo = "0.38.3"
+sysinfo = "0.38.4"
 url = "2.5"
 percent-encoding = "2.3"
 crossterm = "0.27"
