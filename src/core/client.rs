@@ -664,13 +664,15 @@ mod tests {
     use super::*;
     use futures_util::StreamExt;
     use mockito::{Matcher, Server};
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     use std::time::{SystemTime, UNIX_EPOCH};
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     #[cfg(unix)]
     use tokio::net::UnixListener;
+    #[cfg(windows)]
+    use tokio::net::windows::named_pipe::ServerOptions;
     use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 
     #[test]
@@ -742,6 +744,20 @@ mod tests {
             std::process::id(),
             nanos
         ))
+    }
+
+    #[cfg(windows)]
+    fn unique_pipe_name(prefix: &str) -> String {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!(
+            r"\\.\pipe\mihomo-rs-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            nanos
+        )
     }
 
     #[tokio::test]
@@ -876,6 +892,76 @@ mod tests {
     fn test_client_new_named_pipe_full_path() {
         let client = MihomoClient::new("\\\\.\\pipe\\mihomo", None);
         assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_windows_http_get_version_over_named_pipe() {
+        let pipe_name = unique_pipe_name("version");
+        let mut server = ServerOptions::new()
+            .create(&pipe_name)
+            .expect("create named pipe server");
+
+        let server_task = tokio::spawn(async move {
+            server.connect().await.expect("connect named pipe");
+            let mut buf = [0u8; 4096];
+            let n = server.read(&mut buf).await.expect("read request");
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            assert!(request.starts_with("GET /version HTTP/1.1"));
+
+            let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 50\r\n\r\n{\"version\":\"v1.20.0\",\"premium\":false,\"meta\":false}";
+            server
+                .write_all(response.as_bytes())
+                .await
+                .expect("write response");
+        });
+
+        let client = MihomoClient::new(&pipe_name, None).expect("create client");
+        let version = client.get_version().await.expect("get version");
+        assert_eq!(version.version, "v1.20.0");
+        assert!(!version.premium);
+        assert!(!version.meta);
+        server_task.await.expect("server task");
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_windows_stream_logs_over_named_pipe() {
+        use futures_util::SinkExt;
+
+        let pipe_name = unique_pipe_name("stream-logs");
+        let mut server = ServerOptions::new()
+            .create(&pipe_name)
+            .expect("create named pipe server");
+
+        tokio::spawn(async move {
+            server.connect().await.expect("connect named pipe");
+            let ws = accept_async(server).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tx.send(WsMessage::Text("windows log line".into()))
+                .await
+                .expect("send log");
+        });
+
+        let client = MihomoClient::new(&pipe_name, None).expect("create client");
+        let mut rx = client
+            .stream_logs(Some("debug"))
+            .await
+            .expect("stream logs over named pipe");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("log message");
+        assert_eq!(got, "windows log line");
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_windows_get_version_returns_error_when_pipe_missing() {
+        let missing_pipe = unique_pipe_name("missing");
+        let client = MihomoClient::new(&missing_pipe, None).expect("create client");
+        let result = client.get_version().await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
