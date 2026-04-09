@@ -107,6 +107,7 @@ impl ConnectionManager {
 mod tests {
     use super::*;
     use crate::core::{Connection, ConnectionMetadata};
+    use mockito::Server;
 
     // Helper function to create test connection
     fn create_test_connection(id: &str, host: &str, process: &str, rule: &str) -> Connection {
@@ -151,5 +152,65 @@ mod tests {
         assert_eq!(conn.rule, "DIRECT");
         assert_eq!(conn.upload, 1024);
         assert_eq!(conn.download, 2048);
+    }
+
+    #[tokio::test]
+    async fn test_manager_methods_with_mock_server() {
+        let mut server = Server::new_async().await;
+        let payload = r#"{"connections":[{"id":"c1","metadata":{"network":"tcp","type":"HTTP","sourceIP":"10.0.0.2","destinationIP":"1.1.1.1","sourcePort":"52345","destinationPort":"443","host":"example.com","dnsMode":"normal","processPath":"/Applications/Safari.app"},"upload":12,"download":34,"start":"2024-01-01T00:00:00Z","chains":["DIRECT"],"rule":"MATCH","rulePayload":""}],"downloadTotal":34,"uploadTotal":12}"#;
+
+        let list_mock = server
+            .mock("GET", "/connections")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(payload)
+            .expect(7)
+            .create_async()
+            .await;
+        let close_mock = server
+            .mock("DELETE", "/connections/c1")
+            .with_status(204)
+            .expect(2)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).expect("create client");
+        let manager = ConnectionManager::new(client);
+
+        let listed = manager.list().await.expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(
+            manager.get_all().await.expect("get_all").connections.len(),
+            1
+        );
+        assert_eq!(
+            manager.filter_by_host("example").await.expect("host").len(),
+            1
+        );
+        assert_eq!(
+            manager
+                .filter_by_process("Safari")
+                .await
+                .expect("process")
+                .len(),
+            1
+        );
+        assert_eq!(
+            manager.filter_by_rule("MATCH").await.expect("rule").len(),
+            1
+        );
+        assert_eq!(
+            manager.get_statistics().await.expect("statistics"),
+            (34, 12, 1)
+        );
+
+        manager.close("c1").await.expect("close one");
+        assert_eq!(
+            manager.close_by_host("example").await.expect("close host"),
+            1
+        );
+
+        list_mock.assert_async().await;
+        close_mock.assert_async().await;
     }
 }

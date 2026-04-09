@@ -7,14 +7,42 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+
 permissions:
-  contents: write
-  discussions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  validate-version:
+    name: Validate Tag Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify tag version matches Cargo.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "Tag version: ${TAG_VERSION}"
+          echo "Cargo.toml version: ${CARGO_VERSION}"
+          if [ -z "${CARGO_VERSION}" ]; then
+            echo "Failed to read version from Cargo.toml"
+            exit 1
+          fi
+          if [ "${TAG_VERSION}" != "${CARGO_VERSION}" ]; then
+            echo "Tag version does not match Cargo.toml version"
+            exit 1
+          fi
+
   create-release:
     name: Create Release
+    needs: validate-version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -51,6 +79,8 @@ jobs:
     name: Build Release
     needs: create-release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -121,17 +151,32 @@ jobs:
           mv ${{ matrix.asset_name }}.zip ../../../
         shell: bash
 
+      - name: Generate checksum (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: shasum -a 256 ./${{ matrix.asset_name }}.tar.gz > ./${{ matrix.asset_name }}.tar.gz.sha256
+
+      - name: Generate checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $hash = (Get-FileHash ".\${{ matrix.asset_name }}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ matrix.asset_name }}.zip" | Out-File -FilePath ".\${{ matrix.asset_name }}.zip.sha256" -Encoding ascii -NoNewline
+        shell: pwsh
+
       - name: Upload Release Asset (Linux/macOS)
         if: matrix.os != 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          files: ./${{ matrix.asset_name }}.tar.gz
+          files: |
+            ./${{ matrix.asset_name }}.tar.gz
+            ./${{ matrix.asset_name }}.tar.gz.sha256
 
       - name: Upload Release Asset (Windows)
         if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          files: ./${{ matrix.asset_name }}.zip
+          files: |
+            ./${{ matrix.asset_name }}.zip
+            ./${{ matrix.asset_name }}.zip.sha256
 
   publish-crate:
     name: Publish to crates.io
@@ -142,6 +187,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Pre-publish smoke test
+        run: cargo test --all-features --locked
 
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CRATES_TOKEN }}

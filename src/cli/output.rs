@@ -1,6 +1,7 @@
 use crossterm::style::{Color, Print, ResetColor, SetForegroundColor};
 use crossterm::ExecutableCommand;
 use std::io::stdout;
+use unicode_width::UnicodeWidthStr;
 
 pub fn print_success(msg: &str) {
     let mut stdout = stdout();
@@ -31,19 +32,19 @@ pub fn print_table(headers: &[&str], rows: Vec<Vec<String>>) {
         return;
     }
 
-    let mut col_widths = headers.iter().map(|h| h.len()).collect::<Vec<_>>();
+    let mut col_widths = headers.iter().map(|h| display_width(h)).collect::<Vec<_>>();
 
     for row in &rows {
         for (i, cell) in row.iter().enumerate() {
             if i < col_widths.len() {
-                col_widths[i] = col_widths[i].max(cell.len());
+                col_widths[i] = col_widths[i].max(display_width(cell));
             }
         }
     }
 
     print!("│ ");
     for (i, header) in headers.iter().enumerate() {
-        print!("{:width$}", header, width = col_widths[i]);
+        print_padded(header, col_widths[i]);
         if i < headers.len() - 1 {
             print!(" │ ");
         }
@@ -63,12 +64,66 @@ pub fn print_table(headers: &[&str], rows: Vec<Vec<String>>) {
         print!("│ ");
         for (i, cell) in row.iter().enumerate() {
             if i < col_widths.len() {
-                print!("{:width$}", cell, width = col_widths[i]);
+                print_padded(cell, col_widths[i]);
                 if i < row.len() - 1 {
                     print!(" │ ");
                 }
             }
         }
         println!(" │");
+    }
+}
+
+fn display_width(input: &str) -> usize {
+    UnicodeWidthStr::width(input)
+}
+
+fn print_padded(input: &str, width: usize) {
+    print!("{}", input);
+    let current = display_width(input);
+    if width > current {
+        print!("{}", " ".repeat(width - current));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{display_width, print_error, print_info, print_success, print_table};
+
+    #[test]
+    fn test_display_width_mixed_language() {
+        assert_eq!(display_width("abc"), 3);
+        assert_eq!(display_width("测试"), 4);
+        assert_eq!(display_width("a测b"), 4);
+    }
+
+    #[test]
+    fn test_print_colored_messages_do_not_panic() {
+        print_success("operation ok");
+        print_info("some info");
+        print_error("some error");
+    }
+
+    #[test]
+    fn test_print_table_empty_rows_returns_early() {
+        print_table(&["name", "value"], vec![]);
+    }
+
+    #[test]
+    fn test_print_table_with_mixed_content() {
+        let headers = vec!["name", "status", "note"];
+        let rows = vec![
+            vec![
+                "alpha".to_string(),
+                "running".to_string(),
+                "plain ascii".to_string(),
+            ],
+            vec![
+                "测试节点".to_string(),
+                "ok".to_string(),
+                "mixed 中文 + english".to_string(),
+            ],
+        ];
+        print_table(&headers, rows);
     }
 }

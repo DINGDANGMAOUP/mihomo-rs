@@ -5,10 +5,20 @@ on:
     branches: [ main, dev ]
   pull_request:
     branches: [ main, dev ]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -22,30 +32,17 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: ${{ runner.os }}-${{ matrix.rust }}-test
 
       - name: Run tests
-        run: cargo test --verbose --all-features
+        run: cargo test --verbose --all-targets --all-features
 
       - name: Run doc tests
         run: cargo test --doc --verbose
@@ -61,6 +58,11 @@ jobs:
         with:
           components: rustfmt
 
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-stable-fmt
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -74,6 +76,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-stable-clippy
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -90,6 +97,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-stable-build
+
       - name: Build
         run: cargo build --release --verbose
 
@@ -97,13 +109,24 @@ jobs:
         run: cargo build --examples --verbose
 
   security:
-    name: Security Audit
+    name: Security Audit and Policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-stable-security
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
       - name: Run security audit
         run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo deny checks
+        run: cargo deny check advisories bans sources
