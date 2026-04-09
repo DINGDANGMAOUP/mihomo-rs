@@ -957,6 +957,73 @@ mod tests {
 
     #[tokio::test]
     #[cfg(windows)]
+    async fn test_windows_stream_traffic_over_named_pipe() {
+        use futures_util::SinkExt;
+
+        let pipe_name = unique_pipe_name("stream-traffic");
+        let mut server = ServerOptions::new()
+            .create(&pipe_name)
+            .expect("create named pipe server");
+
+        tokio::spawn(async move {
+            server.connect().await.expect("connect named pipe");
+            let ws = accept_async(server).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tx.send(WsMessage::Text(r#"{"up":7,"down":9}"#.into()))
+                .await
+                .expect("send traffic");
+        });
+
+        let client = MihomoClient::new(&pipe_name, None).expect("create client");
+        let mut rx = client
+            .stream_traffic()
+            .await
+            .expect("stream traffic over named pipe");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("traffic message");
+        assert_eq!(got.up, 7);
+        assert_eq!(got.down, 9);
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_windows_stream_connections_over_named_pipe() {
+        use futures_util::SinkExt;
+
+        let pipe_name = unique_pipe_name("stream-connections");
+        let mut server = ServerOptions::new()
+            .create(&pipe_name)
+            .expect("create named pipe server");
+
+        tokio::spawn(async move {
+            server.connect().await.expect("connect named pipe");
+            let ws = accept_async(server).await.expect("accept ws");
+            let (mut tx, _) = ws.split();
+            tx.send(WsMessage::Text(
+                r#"{"connections":[],"downloadTotal":0,"uploadTotal":0}"#.into(),
+            ))
+            .await
+            .expect("send connection snapshot");
+        });
+
+        let client = MihomoClient::new(&pipe_name, None).expect("create client");
+        let mut rx = client
+            .stream_connections()
+            .await
+            .expect("stream connections over named pipe");
+        let got = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("connection snapshot");
+        assert_eq!(got.connections.len(), 0);
+        assert_eq!(got.download_total, 0);
+        assert_eq!(got.upload_total, 0);
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
     async fn test_windows_get_version_returns_error_when_pipe_missing() {
         let missing_pipe = unique_pipe_name("missing");
         let client = MihomoClient::new(&missing_pipe, None).expect("create client");
