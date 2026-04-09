@@ -1,7 +1,7 @@
 use crate::core::{MihomoError, Result};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
 use tokio::fs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +62,13 @@ pub fn kill_process(pid: u32) -> Result<()> {
 pub fn is_process_alive(pid: u32) -> bool {
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::All, true);
-    system.process(Pid::from_u32(pid)).is_some()
+    match system.process(Pid::from_u32(pid)) {
+        Some(process) => !matches!(
+            process.status(),
+            ProcessStatus::Zombie | ProcessStatus::Dead
+        ),
+        None => false,
+    }
 }
 
 pub fn get_process_start_time(pid: u32) -> Option<u64> {
