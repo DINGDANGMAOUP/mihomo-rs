@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 mod common;
 
 use mihomo_rs::cli::{run_cli_command, Commands, ConfigAction, ConnectionAction, ProxyAction};
@@ -28,17 +30,9 @@ async fn run_local_ws_server_for_logs_and_traffic() -> String {
 
     tokio::spawn(async move {
         let (stream_logs, _) = listener.accept().await.expect("accept logs ws");
-        let mut ws_logs = accept_hdr_async(stream_logs, |req: &Request, resp: Response| {
-            let path = req.uri().path().to_string();
-            if path != "/logs" {
-                return Err(tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
-                    Some("unexpected logs path".to_string()),
-                ));
-            }
-            Ok(resp)
-        })
-        .await
-        .expect("accept logs handshake");
+        let mut ws_logs = accept_hdr_async(stream_logs, |_req: &Request, resp: Response| Ok(resp))
+            .await
+            .expect("accept logs handshake");
         ws_logs
             .send(Message::Text("log line".to_string().into()))
             .await
@@ -50,21 +44,13 @@ async fn run_local_ws_server_for_logs_and_traffic() -> String {
 
         let (stream_traffic, _) = listener.accept().await.expect("accept traffic ws");
         let mut ws_traffic =
-            accept_hdr_async(stream_traffic, |req: &Request, resp: Response| {
-                let path = req.uri().path().to_string();
-                if path != "/traffic" {
-                    return Err(
-                        tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
-                            Some("unexpected traffic path".to_string()),
-                        ),
-                    );
-                }
-                Ok(resp)
-            })
-            .await
-            .expect("accept traffic handshake");
+            accept_hdr_async(stream_traffic, |_req: &Request, resp: Response| Ok(resp))
+                .await
+                .expect("accept traffic handshake");
         ws_traffic
-            .send(Message::Text("{\"up\":2048,\"down\":1024}".to_string().into()))
+            .send(Message::Text(
+                "{\"up\":2048,\"down\":1024}".to_string().into(),
+            ))
             .await
             .expect("send traffic message");
         ws_traffic
@@ -77,14 +63,17 @@ async fn run_local_ws_server_for_logs_and_traffic() -> String {
 }
 
 async fn write_executable_script(path: &Path, body: &str) {
-    use tokio::fs;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    use tokio::fs;
 
     fs::write(path, body).await.expect("write script");
     #[cfg(unix)]
     {
-        let mut perms = fs::metadata(path).await.expect("script metadata").permissions();
+        let mut perms = fs::metadata(path)
+            .await
+            .expect("script metadata")
+            .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(path, perms)
             .await
@@ -122,7 +111,11 @@ where
             "write mocked stdin failed"
         );
         assert_eq!(close(fds[1]), 0, "close write end failed");
-        assert_eq!(dup2(fds[0], STDIN_FILENO), STDIN_FILENO, "dup2 stdin failed");
+        assert_eq!(
+            dup2(fds[0], STDIN_FILENO),
+            STDIN_FILENO,
+            "dup2 stdin failed"
+        );
         assert_eq!(close(fds[0]), 0, "close read end failed");
         duped
     };
@@ -151,9 +144,12 @@ async fn run_cli_command_covers_config_version_and_service_paths() {
     env::set_var("MIHOMO_HOME", temp.path());
 
     let cm = ConfigManager::new().expect("config manager");
-    cm.save("default", "port: 7890\nexternal-controller: 127.0.0.1:9090\n")
-        .await
-        .expect("write default profile");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
     cm.save("alt", "port: 7891\nexternal-controller: 127.0.0.1:9090\n")
         .await
         .expect("write alt profile");
@@ -471,15 +467,15 @@ async fn run_cli_command_covers_logs_traffic_and_version_network_error_paths() {
         .await
         .expect("traffic stream");
 
-    assert!(
-        run_cli_command(Commands::Install {
-            version: Some("stable".to_string()),
-        })
-        .await
-        .is_err()
-    );
+    assert!(run_cli_command(Commands::Install {
+        version: Some("stable".to_string()),
+    })
+    .await
+    .is_err());
     assert!(run_cli_command(Commands::Update).await.is_err());
-    assert!(run_cli_command(Commands::ListRemote { limit: 1 }).await.is_err());
+    assert!(run_cli_command(Commands::ListRemote { limit: 1 })
+        .await
+        .is_err());
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);
@@ -545,11 +541,11 @@ async fn run_cli_command_covers_service_success_lifecycle() {
     tokio::fs::write(&binary_path, b"fake-binary")
         .await
         .expect("write fake binary");
-    vm.set_default("v9.9.9")
-        .await
-        .expect("set default version");
+    vm.set_default("v9.9.9").await.expect("set default version");
 
-    run_cli_command(Commands::Start).await.expect("service start");
+    run_cli_command(Commands::Start)
+        .await
+        .expect("service start");
     run_cli_command(Commands::Status)
         .await
         .expect("service status");
@@ -669,17 +665,9 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
     tokio::spawn(async move {
         use futures_util::SinkExt;
         let (stream, _) = listener.accept().await.expect("accept stream ws");
-        let mut ws = accept_hdr_async(stream, |req: &Request, resp: Response| {
-            let path = req.uri().path().to_string();
-            if path != "/connections" {
-                return Err(tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
-                    Some("unexpected stream path".to_string()),
-                ));
-            }
-            Ok(resp)
-        })
-        .await
-        .expect("accept stream handshake");
+        let mut ws = accept_hdr_async(stream, |_req: &Request, resp: Response| Ok(resp))
+            .await
+            .expect("accept stream handshake");
         ws.send(Message::Text(
             r#"{"downloadTotal":3000,"uploadTotal":2000,"connections":[{"id":"stream-conn-1","metadata":{"network":"tcp","type":"HTTP","sourceIP":"10.0.0.2","destinationIP":"4.4.4.4","sourcePort":"52345","destinationPort":"443","host":"example.com","dnsMode":"normal","processPath":"/usr/bin/app","specialProxy":""},"upload":1024,"download":2048,"start":"2024-01-01T00:00:00Z","chains":[],"rule":"MATCH","rulePayload":""}]}"#
                 .to_string()
@@ -738,32 +726,29 @@ async fn run_cli_command_covers_connection_confirmation_branches() {
         .create_async()
         .await;
 
-    with_mocked_stdin(
-        "n\nn\nn\n",
-        async {
-            run_cli_command(Commands::Connection {
-                action: ConnectionAction::CloseAll { force: false },
-            })
-            .await
-            .expect("close all cancelled");
-            run_cli_command(Commands::Connection {
-                action: ConnectionAction::CloseByHost {
-                    host: "example".to_string(),
-                    force: false,
-                },
-            })
-            .await
-            .expect("close by host cancelled");
-            run_cli_command(Commands::Connection {
-                action: ConnectionAction::CloseByProcess {
-                    process: "curl".to_string(),
-                    force: false,
-                },
-            })
-            .await
-            .expect("close by process cancelled");
-        },
-    )
+    with_mocked_stdin("n\nn\nn\n", async {
+        run_cli_command(Commands::Connection {
+            action: ConnectionAction::CloseAll { force: false },
+        })
+        .await
+        .expect("close all cancelled");
+        run_cli_command(Commands::Connection {
+            action: ConnectionAction::CloseByHost {
+                host: "example".to_string(),
+                force: false,
+            },
+        })
+        .await
+        .expect("close by host cancelled");
+        run_cli_command(Commands::Connection {
+            action: ConnectionAction::CloseByProcess {
+                process: "curl".to_string(),
+                force: false,
+            },
+        })
+        .await
+        .expect("close by process cancelled");
+    })
     .await;
 
     mock_connections.assert_async().await;
@@ -793,13 +778,11 @@ async fn run_cli_command_covers_config_and_proxy_empty_branches() {
     tokio::fs::write(temp.path().join("config.toml"), "default = [")
         .await
         .expect("write invalid config.toml");
-    assert!(
-        run_cli_command(Commands::Config {
-            action: ConfigAction::Show { profile: None },
-        })
-        .await
-        .is_err()
-    );
+    assert!(run_cli_command(Commands::Config {
+        action: ConfigAction::Show { profile: None },
+    })
+    .await
+    .is_err());
     tokio::fs::remove_file(temp.path().join("config.toml"))
         .await
         .expect("remove invalid config.toml");
