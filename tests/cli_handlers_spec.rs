@@ -504,6 +504,7 @@ async fn run_cli_command_covers_logs_traffic_and_version_network_error_paths() {
     }
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn run_cli_command_covers_service_success_lifecycle() {
     let _guard = env_lock().lock().await;
@@ -524,23 +525,14 @@ async fn run_cli_command_covers_service_success_lifecycle() {
         .expect("set current profile");
 
     let vm = VersionManager::new().expect("version manager");
-    let binary_name = if cfg!(windows) {
-        "mihomo.exe"
-    } else {
-        "mihomo"
-    };
+    let binary_name = "mihomo";
     let binary_path = temp.path().join("versions/v9.9.9").join(binary_name);
     if let Some(parent) = binary_path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
             .expect("create version dir");
     }
-    #[cfg(unix)]
     write_executable_script(&binary_path, "#!/bin/sh\nsleep 30\n").await;
-    #[cfg(windows)]
-    tokio::fs::write(&binary_path, b"fake-binary")
-        .await
-        .expect("write fake binary");
     vm.set_default("v9.9.9").await.expect("set default version");
 
     run_cli_command(Commands::Start)
