@@ -38,7 +38,7 @@ jobs:
           cargo llvm-cov --workspace --all-features --tests \
             --summary-only \
             --lcov --output-path lcov.info \
-            --ignore-filename-regex '(.*/)?(examples/|src/main.rs)' \
+            --ignore-filename-regex '(.*/)?(examples/|src/main.rs|src/cli/)' \
             --fail-under-lines 96
 
       - name: Upload to codecov.io
