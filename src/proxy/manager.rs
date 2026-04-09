@@ -15,19 +15,7 @@ impl ProxyManager {
         let mut nodes = vec![];
 
         for (name, info) in proxies {
-            let is_group = matches!(
-                info.proxy_type.as_str(),
-                "Selector"
-                    | "URLTest"
-                    | "Fallback"
-                    | "LoadBalance"
-                    | "Relay"
-                    | "Direct"
-                    | "Reject"
-                    | "Pass"
-                    | "Compatible"
-                    | "RejectDrop"
-            );
+            let is_group = Self::is_group_type(&info.proxy_type);
 
             if !is_group {
                 let delay = info.history.first().map(|h| h.delay);
@@ -50,10 +38,7 @@ impl ProxyManager {
         let mut groups = vec![];
 
         for (name, info) in proxies {
-            let is_group = matches!(
-                info.proxy_type.as_str(),
-                "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
-            );
+            let is_group = Self::is_group_type(&info.proxy_type);
 
             if is_group {
                 groups.push(ProxyGroup {
@@ -80,5 +65,26 @@ impl ProxyManager {
 
     pub async fn get_all_proxies(&self) -> Result<HashMap<String, ProxyInfo>> {
         self.client.get_proxies().await
+    }
+
+    fn is_group_type(proxy_type: &str) -> bool {
+        matches!(
+            proxy_type,
+            "Selector" | "URLTest" | "Fallback" | "LoadBalance" | "Relay"
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProxyManager;
+
+    #[test]
+    fn test_group_type_classification() {
+        assert!(ProxyManager::is_group_type("Selector"));
+        assert!(ProxyManager::is_group_type("URLTest"));
+        assert!(!ProxyManager::is_group_type("Direct"));
+        assert!(!ProxyManager::is_group_type("Reject"));
+        assert!(!ProxyManager::is_group_type("Pass"));
     }
 }

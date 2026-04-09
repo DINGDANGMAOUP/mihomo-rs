@@ -42,10 +42,9 @@ pub struct ChannelInfo {
 pub async fn fetch_latest(channel: Channel) -> Result<ChannelInfo> {
     let url = match channel {
         Channel::Stable => "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest",
-        Channel::Beta => {
-            "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1&prerelease=true"
+        Channel::Beta | Channel::Nightly => {
+            "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=20"
         }
-        Channel::Nightly => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=1",
     };
 
     let client = reqwest::Client::new();
@@ -54,23 +53,64 @@ pub async fn fetch_latest(channel: Channel) -> Result<ChannelInfo> {
         .header("User-Agent", "mihomo-rs")
         .send()
         .await?;
+    if !resp.status().is_success() {
+        return Err(crate::core::MihomoError::Version(format!(
+            "GitHub API error: {}",
+            resp.status()
+        )));
+    }
 
     let data: serde_json::Value = resp.json().await?;
 
     let (version, date) = if channel == Channel::Stable {
-        let tag = data["tag_name"].as_str().unwrap_or("").to_string();
-        let date = data["published_at"].as_str().unwrap_or("").to_string();
+        let tag = data["tag_name"].as_str().unwrap_or_default().to_string();
+        let date = data["published_at"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if tag.is_empty() {
+            return Err(crate::core::MihomoError::Version(
+                "No stable release found".to_string(),
+            ));
+        }
         (tag, date)
     } else {
         let empty_vec = vec![];
         let releases = data.as_array().unwrap_or(&empty_vec);
-        if let Some(release) = releases.first() {
-            let tag = release["tag_name"].as_str().unwrap_or("").to_string();
-            let date = release["published_at"].as_str().unwrap_or("").to_string();
+        let selected = match channel {
+            Channel::Beta => releases
+                .iter()
+                .find(|release| release["prerelease"].as_bool().unwrap_or(false)),
+            Channel::Nightly => releases
+                .iter()
+                .find(|release| {
+                    let tag = release["tag_name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_lowercase();
+                    release["prerelease"].as_bool().unwrap_or(false)
+                        || tag.contains("nightly")
+                        || tag.contains("alpha")
+                })
+                .or_else(|| releases.first()),
+            Channel::Stable => None,
+        };
+
+        if let Some(release) = selected {
+            let tag = release["tag_name"].as_str().unwrap_or_default().to_string();
+            let date = release["published_at"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            if tag.is_empty() {
+                return Err(crate::core::MihomoError::Version(
+                    "Invalid release data: empty tag_name".to_string(),
+                ));
+            }
             (tag, date)
         } else {
             return Err(crate::core::MihomoError::Version(
-                "No releases found".to_string(),
+                "No releases found for selected channel".to_string(),
             ));
         }
     };

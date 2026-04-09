@@ -1,6 +1,7 @@
 use crossterm::style::{Color, Print, ResetColor, SetForegroundColor};
 use crossterm::ExecutableCommand;
 use std::io::stdout;
+use unicode_width::UnicodeWidthStr;
 
 pub fn print_success(msg: &str) {
     let mut stdout = stdout();
@@ -31,19 +32,19 @@ pub fn print_table(headers: &[&str], rows: Vec<Vec<String>>) {
         return;
     }
 
-    let mut col_widths = headers.iter().map(|h| h.len()).collect::<Vec<_>>();
+    let mut col_widths = headers.iter().map(|h| display_width(h)).collect::<Vec<_>>();
 
     for row in &rows {
         for (i, cell) in row.iter().enumerate() {
             if i < col_widths.len() {
-                col_widths[i] = col_widths[i].max(cell.len());
+                col_widths[i] = col_widths[i].max(display_width(cell));
             }
         }
     }
 
     print!("│ ");
     for (i, header) in headers.iter().enumerate() {
-        print!("{:width$}", header, width = col_widths[i]);
+        print_padded(header, col_widths[i]);
         if i < headers.len() - 1 {
             print!(" │ ");
         }
@@ -63,12 +64,36 @@ pub fn print_table(headers: &[&str], rows: Vec<Vec<String>>) {
         print!("│ ");
         for (i, cell) in row.iter().enumerate() {
             if i < col_widths.len() {
-                print!("{:width$}", cell, width = col_widths[i]);
+                print_padded(cell, col_widths[i]);
                 if i < row.len() - 1 {
                     print!(" │ ");
                 }
             }
         }
         println!(" │");
+    }
+}
+
+fn display_width(input: &str) -> usize {
+    UnicodeWidthStr::width(input)
+}
+
+fn print_padded(input: &str, width: usize) {
+    print!("{}", input);
+    let current = display_width(input);
+    if width > current {
+        print!("{}", " ".repeat(width - current));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_width;
+
+    #[test]
+    fn test_display_width_mixed_language() {
+        assert_eq!(display_width("abc"), 3);
+        assert_eq!(display_width("测试"), 4);
+        assert_eq!(display_width("a测b"), 4);
     }
 }

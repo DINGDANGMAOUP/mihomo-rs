@@ -2,6 +2,7 @@ mod common;
 
 use common::{create_test_config, get_temp_home_path, setup_temp_home};
 use mihomo_rs::{ConfigManager, Result};
+use tokio::fs;
 
 #[tokio::test]
 async fn test_config_manager_new() -> Result<()> {
@@ -184,6 +185,67 @@ external-controller: 127.0.0.1:9090
 
     let controller_tcp = cm.get_external_controller().await?;
     assert_eq!(controller_tcp, "http://127.0.0.1:9090");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ensure_external_controller_preserves_unix_socket() -> Result<()> {
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let cm = ConfigManager::with_home(home)?;
+
+    let config_unix = r#"
+port: 7890
+socks-port: 7891
+external-controller: /var/run/mihomo.sock
+"#;
+    cm.save("unix-ensure-test", config_unix).await?;
+    cm.set_current("unix-ensure-test").await?;
+
+    let controller = cm.ensure_external_controller().await?;
+    assert_eq!(controller, "/var/run/mihomo.sock");
+
+    let updated = cm.load("unix-ensure-test").await?;
+    assert!(updated.contains("external-controller: /var/run/mihomo.sock"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ensure_external_controller_preserves_remote_host_port() -> Result<()> {
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let cm = ConfigManager::with_home(home)?;
+
+    let config_remote = r#"
+port: 7890
+socks-port: 7891
+external-controller: example.com:19090
+"#;
+    cm.save("remote-test", config_remote).await?;
+    cm.set_current("remote-test").await?;
+
+    let controller = cm.ensure_external_controller().await?;
+    assert_eq!(controller, "http://example.com:19090");
+
+    let updated = cm.load("remote-test").await?;
+    assert!(updated.contains("external-controller: example.com:19090"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_set_current_fails_on_invalid_settings_file() -> Result<()> {
+    let temp_dir = setup_temp_home();
+    let home = get_temp_home_path(&temp_dir);
+    let cm = ConfigManager::with_home(home.clone())?;
+
+    cm.save("broken", &create_test_config()).await?;
+    fs::write(home.join("config.toml"), "[default").await?;
+
+    let result = cm.set_current("broken").await;
+    assert!(result.is_err());
 
     Ok(())
 }

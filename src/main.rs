@@ -92,7 +92,7 @@ async fn run() -> anyhow::Result<()> {
                             r.version.clone(),
                             r.name.clone(),
                             if r.prerelease { "Yes" } else { "No" }.to_string(),
-                            r.published_at[..10].to_string(),
+                            truncate_for_display(&r.published_at, 10),
                         ]
                     })
                     .collect();
@@ -184,18 +184,23 @@ async fn run() -> anyhow::Result<()> {
         Commands::Restart => {
             let vm = VersionManager::new()?;
             let cm = ConfigManager::new()?;
+            let binary = vm.get_binary_path(None).await?;
+            let config = cm.get_current_path().await?;
+            let sm = ServiceManager::new(binary, config);
+
+            // Stop first to avoid treating current controller port as "occupied by other process".
+            if sm.is_running().await {
+                sm.stop().await?;
+            }
 
             // Ensure default config exists
             cm.ensure_default_config().await?;
 
-            // Ensure external-controller is configured before restarting
+            // Ensure external-controller is configured after stop, before start
             let controller_url = cm.ensure_external_controller().await?;
             log::info!("External controller configured at: {}", controller_url);
 
-            let binary = vm.get_binary_path(None).await?;
-            let config = cm.get_current_path().await?;
-            let sm = ServiceManager::new(binary, config);
-            sm.restart().await?;
+            sm.start().await?;
             print_success("Service restarted");
         }
 
@@ -374,7 +379,7 @@ async fn run() -> anyhow::Result<()> {
                                     "-".to_string()
                                 };
                                 vec![
-                                    c.id[..8].to_string(),
+                                    truncate_for_display(&c.id, 8),
                                     host,
                                     chain,
                                     format!("{:.1} KB", c.download as f64 / 1024.0),
@@ -442,7 +447,10 @@ async fn run() -> anyhow::Result<()> {
 
                 ConnectionAction::Close { id } => {
                     conn_mgr.close(&id).await?;
-                    print_success(&format!("Closed connection {}", &id[..8]));
+                    print_success(&format!(
+                        "Closed connection {}",
+                        truncate_for_display(&id, 8)
+                    ));
                 }
 
                 ConnectionAction::CloseAll { force } => {
@@ -470,7 +478,7 @@ async fn run() -> anyhow::Result<()> {
                             .iter()
                             .map(|c| {
                                 vec![
-                                    c.id[..8].to_string(),
+                                    truncate_for_display(&c.id, 8),
                                     c.metadata.host.clone(),
                                     c.chains.join(" -> "),
                                     format!("{:.1} KB", c.download as f64 / 1024.0),
@@ -497,7 +505,7 @@ async fn run() -> anyhow::Result<()> {
                                     c.metadata.destination_ip.clone()
                                 };
                                 vec![
-                                    c.id[..8].to_string(),
+                                    truncate_for_display(&c.id, 8),
                                     host,
                                     c.metadata.process_path.clone(),
                                     format!("{:.1} KB", c.download as f64 / 1024.0),
@@ -576,4 +584,8 @@ async fn run() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn truncate_for_display(input: &str, max_chars: usize) -> String {
+    input.chars().take(max_chars).collect()
 }

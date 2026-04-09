@@ -1,9 +1,8 @@
 use super::profile::Profile;
-use crate::core::{
-    find_available_port, get_home_dir, is_port_available, parse_port_from_addr, MihomoError, Result,
-};
+use crate::core::{find_available_port, get_home_dir, is_port_available, MihomoError, Result};
 use std::path::PathBuf;
 use tokio::fs;
+use url::Url;
 
 pub struct ConfigManager {
     config_dir: PathBuf,
@@ -105,11 +104,14 @@ impl ConfigManager {
             )));
         }
 
-        fs::create_dir_all(self.settings_file.parent().unwrap()).await?;
+        if let Some(parent) = self.settings_file.parent() {
+            fs::create_dir_all(parent).await?;
+        }
 
         let mut config = if self.settings_file.exists() {
             let content = fs::read_to_string(&self.settings_file).await?;
-            toml::from_str(&content).unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+            toml::from_str(&content)
+                .map_err(|e| MihomoError::Config(format!("Invalid config: {}", e)))?
         } else {
             toml::Value::Table(toml::map::Map::new())
         };
@@ -226,25 +228,52 @@ external-controller: 127.0.0.1:{}
 
         let needs_update = match config.get("external-controller").and_then(|v| v.as_str()) {
             Some(controller) => {
-                // Parse the port from the controller address
-                let addr = if controller.starts_with(':') {
-                    format!("127.0.0.1{}", controller)
-                } else {
-                    controller.to_string()
-                };
-
-                match parse_port_from_addr(&addr) {
-                    Some(port) => {
-                        if !is_port_available(port) {
-                            log::warn!("Port {} is occupied, finding alternative", port);
+                if controller.starts_with('/') || controller.starts_with("unix://") {
+                    false
+                } else if controller.starts_with("http://") || controller.starts_with("https://") {
+                    match Url::parse(controller) {
+                        Ok(url) => {
+                            let host = url.host_str().unwrap_or_default();
+                            let port = url.port_or_known_default();
+                            if Self::is_local_controller_host(host) {
+                                match port {
+                                    Some(p) => !is_port_available(p),
+                                    None => true,
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                        Err(_) => {
+                            log::warn!("Invalid external-controller URL: {}", controller);
                             true
-                        } else {
-                            false
                         }
                     }
-                    None => {
-                        log::warn!("Invalid external-controller format: {}", controller);
-                        true
+                } else {
+                    // Parse the port from plain controller address
+                    let addr = if controller.starts_with(':') {
+                        format!("127.0.0.1{}", controller)
+                    } else {
+                        controller.to_string()
+                    };
+
+                    match Self::extract_host_port(&addr) {
+                        Some((host, port)) => {
+                            if Self::is_local_controller_host(&host) {
+                                if !is_port_available(port) {
+                                    log::warn!("Port {} is occupied, finding alternative", port);
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                        None => {
+                            log::warn!("Invalid external-controller format: {}", controller);
+                            true
+                        }
                     }
                 }
             }
@@ -276,5 +305,16 @@ external-controller: 127.0.0.1:{}
         } else {
             self.get_external_controller().await
         }
+    }
+
+    fn is_local_controller_host(host: &str) -> bool {
+        matches!(host, "127.0.0.1" | "localhost" | "0.0.0.0" | "::1")
+    }
+
+    fn extract_host_port(addr: &str) -> Option<(String, u16)> {
+        let url = Url::parse(&format!("http://{}", addr)).ok()?;
+        let host = url.host_str()?.to_string();
+        let port = url.port()?;
+        Some((host, port))
     }
 }

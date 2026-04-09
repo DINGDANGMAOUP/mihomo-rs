@@ -1,12 +1,31 @@
 use super::error::Result;
 use super::types::*;
 use futures_util::StreamExt;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
+
+const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'/')
+    .add(b'?')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
 
 #[derive(Clone)]
 enum Transport {
@@ -18,6 +37,7 @@ enum Transport {
 pub struct MihomoClient {
     transport: Transport,
     secret: Option<String>,
+    ws_connect_timeout: Duration,
 }
 
 impl MihomoClient {
@@ -38,7 +58,11 @@ impl MihomoClient {
             }
         };
 
-        Ok(Self { transport, secret })
+        Ok(Self {
+            transport,
+            secret,
+            ws_connect_timeout: Duration::from_secs(10),
+        })
     }
 
     async fn http_request(
@@ -70,7 +94,7 @@ impl MihomoClient {
                 }
                 req = self.add_auth(req);
 
-                let resp = req.send().await?;
+                let resp = req.send().await?.error_for_status()?;
                 Ok(resp.bytes().await?.to_vec())
             }
             Transport::Unix { socket_path } => {
@@ -97,15 +121,18 @@ impl MihomoClient {
 
             let query_str = query
                 .map(|q| {
-                    let params: Vec<String> =
-                        q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
-                    format!("?{}", params.join("&"))
+                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                    for (k, v) in q {
+                        serializer.append_pair(k, v);
+                    }
+                    format!("?{}", serializer.finish())
                 })
                 .unwrap_or_default();
 
-            let body_str = body
-                .map(|b| serde_json::to_string(&b).unwrap())
-                .unwrap_or_default();
+            let body_str = match body {
+                Some(b) => serde_json::to_string(&b)?,
+                None => String::new(),
+            };
 
             let auth_header = self
                 .secret
@@ -135,8 +162,21 @@ impl MihomoClient {
             stream.read_to_end(&mut response).await?;
 
             let response_str = String::from_utf8_lossy(&response);
+            let status_line = response_str.lines().next().unwrap_or_default().to_string();
             if let Some(pos) = response_str.find("\r\n\r\n") {
-                Ok(response[pos + 4..].to_vec())
+                let body_bytes = response[pos + 4..].to_vec();
+                if let Some(code_str) = status_line.split_whitespace().nth(1) {
+                    if let Ok(code) = code_str.parse::<u16>() {
+                        if code >= 400 {
+                            return Err(super::error::MihomoError::Service(format!(
+                                "HTTP error {}: {}",
+                                code,
+                                String::from_utf8_lossy(&body_bytes)
+                            )));
+                        }
+                    }
+                }
+                Ok(body_bytes)
             } else {
                 Err(super::error::MihomoError::Config(
                     "Invalid HTTP response".into(),
@@ -158,15 +198,18 @@ impl MihomoClient {
 
             let query_str = query
                 .map(|q| {
-                    let params: Vec<String> =
-                        q.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
-                    format!("?{}", params.join("&"))
+                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                    for (k, v) in q {
+                        serializer.append_pair(k, v);
+                    }
+                    format!("?{}", serializer.finish())
                 })
                 .unwrap_or_default();
 
-            let body_str = body
-                .map(|b| serde_json::to_string(&b).unwrap())
-                .unwrap_or_default();
+            let body_str = match body {
+                Some(b) => serde_json::to_string(&b)?,
+                None => String::new(),
+            };
 
             let auth_header = self
                 .secret
@@ -196,8 +239,21 @@ impl MihomoClient {
             stream.read_to_end(&mut response).await?;
 
             let response_str = String::from_utf8_lossy(&response);
+            let status_line = response_str.lines().next().unwrap_or_default().to_string();
             if let Some(pos) = response_str.find("\r\n\r\n") {
-                Ok(response[pos + 4..].to_vec())
+                let body_bytes = response[pos + 4..].to_vec();
+                if let Some(code_str) = status_line.split_whitespace().nth(1) {
+                    if let Ok(code) = code_str.parse::<u16>() {
+                        if code >= 400 {
+                            return Err(super::error::MihomoError::Service(format!(
+                                "HTTP error {}: {}",
+                                code,
+                                String::from_utf8_lossy(&body_bytes)
+                            )));
+                        }
+                    }
+                }
+                Ok(body_bytes)
             } else {
                 Err(super::error::MihomoError::Config(
                     "Invalid HTTP response".into(),
@@ -220,6 +276,36 @@ impl MihomoClient {
         req
     }
 
+    fn encode_path_segment(input: &str) -> String {
+        utf8_percent_encode(input, PATH_SEGMENT_ENCODE_SET).to_string()
+    }
+
+    pub fn with_ws_connect_timeout(mut self, timeout: Duration) -> Self {
+        self.ws_connect_timeout = timeout.max(Duration::from_millis(1));
+        self
+    }
+
+    fn ws_request_with_auth(
+        url: &str,
+        secret: Option<&str>,
+    ) -> std::result::Result<
+        tokio_tungstenite::tungstenite::handshake::client::Request,
+        tokio_tungstenite::tungstenite::Error,
+    > {
+        let mut request = url.into_client_request()?;
+        if let Some(secret) = secret {
+            let header = format!("Bearer {}", secret);
+            if let Ok(value) = header.parse() {
+                request.headers_mut().insert("Authorization", value);
+            }
+        }
+        Ok(request)
+    }
+
+    fn ws_timeout_error(endpoint: &str) -> super::error::MihomoError {
+        super::error::MihomoError::Service(format!("WebSocket connection timeout: {}", endpoint))
+    }
+
     pub async fn get_version(&self) -> Result<Version> {
         let response = self.http_request("GET", "/version", None, None).await?;
         Ok(serde_json::from_slice(&response)?)
@@ -234,17 +320,19 @@ impl MihomoClient {
     }
 
     pub async fn get_proxy(&self, name: &str) -> Result<ProxyInfo> {
+        let encoded_name = Self::encode_path_segment(name);
         let response = self
-            .http_request("GET", &format!("/proxies/{}", name), None, None)
+            .http_request("GET", &format!("/proxies/{}", encoded_name), None, None)
             .await?;
         Ok(serde_json::from_slice(&response)?)
     }
 
     pub async fn switch_proxy(&self, group: &str, proxy: &str) -> Result<()> {
+        let encoded_group = Self::encode_path_segment(group);
         log::debug!("Switching group '{}' to proxy '{}'", group, proxy);
         self.http_request(
             "PUT",
-            &format!("/proxies/{}", group),
+            &format!("/proxies/{}", encoded_group),
             None,
             Some(json!({ "name": proxy })),
         )
@@ -254,10 +342,11 @@ impl MihomoClient {
     }
 
     pub async fn test_delay(&self, proxy: &str, test_url: &str, timeout: u32) -> Result<u32> {
+        let encoded_proxy = Self::encode_path_segment(proxy);
         let response = self
             .http_request(
                 "GET",
-                &format!("/proxies/{}/delay", proxy),
+                &format!("/proxies/{}/delay", encoded_proxy),
                 Some(&[
                     ("timeout", timeout.to_string()),
                     ("url", test_url.to_string()),
@@ -302,12 +391,80 @@ impl MihomoClient {
                     .ok();
                 ws_url.set_path("/logs");
                 if let Some(level) = level {
-                    ws_url.set_query(Some(&format!("level={}", level)));
+                    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                    serializer.append_pair("level", level);
+                    ws_url.set_query(Some(&serializer.finish()));
                 }
 
                 let ws_url_str = ws_url.to_string();
+                let request =
+                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
+                let (ws_stream, _) =
+                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
+                        .await
+                        .map_err(|_| Self::ws_timeout_error("logs"))??;
                 tokio::spawn(async move {
-                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                    let (_, mut read) = ws_stream.split();
+                    while let Some(msg) = read.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if tx.send(text.to_string()).is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {}
+                        }
+                    }
+                });
+            }
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+                let level = level.map(|s| s.to_string());
+                let secret = self.secret.clone();
+
+                #[cfg(unix)]
+                {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        UnixStream::connect(&socket_path),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("logs"))??;
+                    let mut path = "/logs".to_string();
+                    if let Some(l) = level {
+                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                        serializer.append_pair("level", &l);
+                        path.push('?');
+                        path.push_str(&serializer.finish());
+                    }
+
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET {} HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        path, auth_header
+                    );
+
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("logs"))??;
+                    tokio::spawn(async move {
                         let (_, mut read) = ws_stream.split();
                         while let Some(msg) = read.next().await {
                             match msg {
@@ -321,98 +478,80 @@ impl MihomoClient {
                                 _ => {}
                             }
                         }
+                    });
+                }
+                #[cfg(windows)]
+                {
+                    use tokio::net::windows::named_pipe::ClientOptions;
+                    use tokio_tungstenite::client_async;
+
+                    let pipe_path = socket_path.to_string_lossy();
+                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                        pipe_path.to_string()
+                    } else {
+                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                    };
+
+                    let pipe_name_for_open = pipe_name.clone();
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        tokio::task::spawn_blocking(move || {
+                            ClientOptions::new().open(&pipe_name_for_open)
+                        }),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("logs"))?
+                    .map_err(|e| {
+                        super::error::MihomoError::Service(format!(
+                            "Failed to join named pipe connect task: {}",
+                            e
+                        ))
+                    })??;
+                    let mut path = "/logs".to_string();
+                    if let Some(l) = level {
+                        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+                        serializer.append_pair("level", &l);
+                        path.push('?');
+                        path.push_str(&serializer.finish());
                     }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
-                let level = level.map(|s| s.to_string());
 
-                tokio::spawn(async move {
-                    #[cfg(unix)]
-                    {
-                        use tokio::net::UnixStream;
-                        use tokio_tungstenite::client_async;
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET {} HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        path, auth_header
+                    );
 
-                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                            let mut path = "/logs".to_string();
-                            if let Some(l) = level {
-                                path.push_str(&format!("?level={}", l));
-                            }
-
-                            let request = format!(
-                                "GET {} HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n",
-                                path
-                            );
-
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if tx.send(text.to_string()).is_err() {
-                                                break;
-                                            }
-                                        }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("logs"))??;
+                    tokio::spawn(async move {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if tx.send(text.to_string()).is_err() {
+                                        break;
                                     }
                                 }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
                             }
                         }
-                    }
-                    #[cfg(windows)]
-                    {
-                        use tokio::net::windows::named_pipe::ClientOptions;
-                        use tokio_tungstenite::client_async;
-
-                        let pipe_path = socket_path.to_string_lossy();
-                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                            pipe_path.to_string()
-                        } else {
-                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-                        };
-
-                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
-                            let mut path = "/logs".to_string();
-                            if let Some(l) = level {
-                                path.push_str(&format!("?level={}", l));
-                            }
-
-                            let request = format!(
-                                "GET {} HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n",
-                                path
-                            );
-
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if tx.send(text.to_string()).is_err() {
-                                                break;
-                                            }
-                                        }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+                    });
+                }
             }
         }
 
@@ -437,8 +576,69 @@ impl MihomoClient {
                 ws_url.set_path("/traffic");
 
                 let ws_url_str = ws_url.to_string();
+                let request =
+                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
+                let (ws_stream, _) =
+                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
+                        .await
+                        .map_err(|_| Self::ws_timeout_error("traffic"))??;
                 tokio::spawn(async move {
-                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                    let (_, mut read) = ws_stream.split();
+                    while let Some(msg) = read.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if let Ok(traffic) =
+                                    serde_json::from_str::<TrafficData>(text.as_ref())
+                                {
+                                    if tx.send(traffic).is_err() {
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {}
+                        }
+                    }
+                });
+            }
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+                let secret = self.secret.clone();
+
+                #[cfg(unix)]
+                {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        UnixStream::connect(&socket_path),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET /traffic HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        auth_header
+                    );
+
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
+                    tokio::spawn(async move {
                         let (_, mut read) = ws_stream.split();
                         while let Some(msg) = read.next().await {
                             match msg {
@@ -456,89 +656,76 @@ impl MihomoClient {
                                 _ => {}
                             }
                         }
-                    }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
+                    });
+                }
+                #[cfg(windows)]
+                {
+                    use tokio::net::windows::named_pipe::ClientOptions;
+                    use tokio_tungstenite::client_async;
 
-                tokio::spawn(async move {
-                    #[cfg(unix)]
-                    {
-                        use tokio::net::UnixStream;
-                        use tokio_tungstenite::client_async;
+                    let pipe_path = socket_path.to_string_lossy();
+                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                        pipe_path.to_string()
+                    } else {
+                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                    };
 
-                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                            let request = "GET /traffic HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n";
+                    let pipe_name_for_open = pipe_name.clone();
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        tokio::task::spawn_blocking(move || {
+                            ClientOptions::new().open(&pipe_name_for_open)
+                        }),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("traffic"))?
+                    .map_err(|e| {
+                        super::error::MihomoError::Service(format!(
+                            "Failed to join named pipe connect task: {}",
+                            e
+                        ))
+                    })??;
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET /traffic HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        auth_header
+                    );
 
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if let Ok(traffic) =
-                                                serde_json::from_str::<TrafficData>(text.as_ref())
-                                            {
-                                                if tx.send(traffic).is_err() {
-                                                    break;
-                                                }
-                                            }
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("traffic"))??;
+                    tokio::spawn(async move {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if let Ok(traffic) =
+                                        serde_json::from_str::<TrafficData>(text.as_ref())
+                                    {
+                                        if tx.send(traffic).is_err() {
+                                            break;
                                         }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
                                     }
                                 }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
                             }
                         }
-                    }
-                    #[cfg(windows)]
-                    {
-                        use tokio::net::windows::named_pipe::ClientOptions;
-                        use tokio_tungstenite::client_async;
-
-                        let pipe_path = socket_path.to_string_lossy();
-                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                            pipe_path.to_string()
-                        } else {
-                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-                        };
-
-                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
-                            let request = "GET /traffic HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n";
-
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if let Ok(traffic) =
-                                                serde_json::from_str::<TrafficData>(text.as_ref())
-                                            {
-                                                if tx.send(traffic).is_err() {
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+                    });
+                }
             }
         }
 
@@ -567,9 +754,15 @@ impl MihomoClient {
     }
 
     pub async fn close_connection(&self, id: &str) -> Result<()> {
+        let encoded_id = Self::encode_path_segment(id);
         log::debug!("Closing connection '{}'", id);
-        self.http_request("DELETE", &format!("/connections/{}", id), None, None)
-            .await?;
+        self.http_request(
+            "DELETE",
+            &format!("/connections/{}", encoded_id),
+            None,
+            None,
+        )
+        .await?;
         log::debug!("Successfully closed connection '{}'", id);
         Ok(())
     }
@@ -592,8 +785,69 @@ impl MihomoClient {
                 ws_url.set_path("/connections");
 
                 let ws_url_str = ws_url.to_string();
+                let request =
+                    MihomoClient::ws_request_with_auth(&ws_url_str, self.secret.as_deref())?;
+                let (ws_stream, _) =
+                    tokio::time::timeout(self.ws_connect_timeout, connect_async(request))
+                        .await
+                        .map_err(|_| Self::ws_timeout_error("connections"))??;
                 tokio::spawn(async move {
-                    if let Ok((ws_stream, _)) = connect_async(&ws_url_str).await {
+                    let (_, mut read) = ws_stream.split();
+                    while let Some(msg) = read.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if let Ok(snapshot) =
+                                    serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
+                                {
+                                    if tx.send(snapshot).is_err() {
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {}
+                        }
+                    }
+                });
+            }
+            Transport::Unix { socket_path } => {
+                let socket_path = socket_path.clone();
+                let secret = self.secret.clone();
+
+                #[cfg(unix)]
+                {
+                    use tokio::net::UnixStream;
+                    use tokio_tungstenite::client_async;
+
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        UnixStream::connect(&socket_path),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("connections"))??;
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET /connections HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        auth_header
+                    );
+
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("connections"))??;
+                    tokio::spawn(async move {
                         let (_, mut read) = ws_stream.split();
                         while let Some(msg) = read.next().await {
                             match msg {
@@ -611,93 +865,76 @@ impl MihomoClient {
                                 _ => {}
                             }
                         }
-                    }
-                });
-            }
-            Transport::Unix { socket_path } => {
-                let socket_path = socket_path.clone();
+                    });
+                }
+                #[cfg(windows)]
+                {
+                    use tokio::net::windows::named_pipe::ClientOptions;
+                    use tokio_tungstenite::client_async;
 
-                tokio::spawn(async move {
-                    #[cfg(unix)]
-                    {
-                        use tokio::net::UnixStream;
-                        use tokio_tungstenite::client_async;
+                    let pipe_path = socket_path.to_string_lossy();
+                    let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
+                        pipe_path.to_string()
+                    } else {
+                        format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
+                    };
 
-                        if let Ok(stream) = UnixStream::connect(&socket_path).await {
-                            let request = "GET /connections HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n";
+                    let pipe_name_for_open = pipe_name.clone();
+                    let stream = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        tokio::task::spawn_blocking(move || {
+                            ClientOptions::new().open(&pipe_name_for_open)
+                        }),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("connections"))?
+                    .map_err(|e| {
+                        super::error::MihomoError::Service(format!(
+                            "Failed to join named pipe connect task: {}",
+                            e
+                        ))
+                    })??;
+                    let auth_header = secret
+                        .as_ref()
+                        .map(|s| format!("Authorization: Bearer {}\r\n", s))
+                        .unwrap_or_default();
+                    let request = format!(
+                        "GET /connections HTTP/1.1\r\n\
+                         Host: localhost\r\n\
+                         Upgrade: websocket\r\n\
+                         Connection: Upgrade\r\n\
+                         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+                         Sec-WebSocket-Version: 13\r\n\
+                         {}\r\n",
+                        auth_header
+                    );
 
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if let Ok(snapshot) =
-                                                serde_json::from_str::<ConnectionSnapshot>(
-                                                    text.as_ref(),
-                                                )
-                                            {
-                                                if tx.send(snapshot).is_err() {
-                                                    break;
-                                                }
-                                            }
+                    let (ws_stream, _) = tokio::time::timeout(
+                        self.ws_connect_timeout,
+                        client_async(request, stream),
+                    )
+                    .await
+                    .map_err(|_| Self::ws_timeout_error("connections"))??;
+                    tokio::spawn(async move {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if let Ok(snapshot) =
+                                        serde_json::from_str::<ConnectionSnapshot>(text.as_ref())
+                                    {
+                                        if tx.send(snapshot).is_err() {
+                                            break;
                                         }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
                                     }
                                 }
+                                Ok(Message::Close(_)) => break,
+                                Err(_) => break,
+                                _ => {}
                             }
                         }
-                    }
-                    #[cfg(windows)]
-                    {
-                        use tokio::net::windows::named_pipe::ClientOptions;
-                        use tokio_tungstenite::client_async;
-
-                        let pipe_path = socket_path.to_string_lossy();
-                        let pipe_name = if pipe_path.starts_with("\\\\.\\pipe\\") {
-                            pipe_path.to_string()
-                        } else {
-                            format!("\\\\.\\pipe\\{}", pipe_path.trim_start_matches('/'))
-                        };
-
-                        if let Ok(stream) = ClientOptions::new().open(&pipe_name) {
-                            let request = "GET /connections HTTP/1.1\r\n\
-                                 Host: localhost\r\n\
-                                 Upgrade: websocket\r\n\
-                                 Connection: Upgrade\r\n\
-                                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                                 Sec-WebSocket-Version: 13\r\n\r\n";
-
-                            if let Ok((ws_stream, _)) = client_async(request, stream).await {
-                                let (_, mut read) = ws_stream.split();
-                                while let Some(msg) = read.next().await {
-                                    match msg {
-                                        Ok(Message::Text(text)) => {
-                                            if let Ok(snapshot) =
-                                                serde_json::from_str::<ConnectionSnapshot>(
-                                                    text.as_ref(),
-                                                )
-                                            {
-                                                if tx.send(snapshot).is_err() {
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        Ok(Message::Close(_)) => break,
-                                        Err(_) => break,
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+                    });
+                }
             }
         }
 
@@ -735,6 +972,16 @@ mod tests {
         let client = MihomoClient::new("http://127.0.0.1:9090", None).unwrap();
         let _cloned = client.clone();
         // Just verify that cloning works without panicking
+    }
+
+    #[test]
+    fn test_with_ws_connect_timeout() {
+        use std::time::Duration;
+
+        let client = MihomoClient::new("http://127.0.0.1:9090", None)
+            .unwrap()
+            .with_ws_connect_timeout(Duration::from_millis(250));
+        assert_eq!(client.ws_connect_timeout, Duration::from_millis(250));
     }
 
     #[test]
@@ -786,6 +1033,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_version_returns_error_on_http_status_failure() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/version")
+            .with_status(500)
+            .with_body("internal error")
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_version().await;
+
+        mock.assert_async().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
     async fn test_get_proxies() {
         let mut server = Server::new_async().await;
         let mock = server
@@ -818,6 +1082,24 @@ mod tests {
 
         let client = MihomoClient::new(&server.url(), None).unwrap();
         let result = client.get_proxy("DIRECT").await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_proxy_encodes_path_segment() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/proxies/group%2Ftest")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"type":"Selector","now":"a","all":["a"],"history":[]}"#)
+            .create_async()
+            .await;
+
+        let client = MihomoClient::new(&server.url(), None).unwrap();
+        let result = client.get_proxy("group/test").await;
 
         mock.assert_async().await;
         assert!(result.is_ok());
@@ -994,6 +1276,18 @@ mod tests {
 
         mock.assert_async().await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ws_request_with_auth_header() {
+        let request =
+            MihomoClient::ws_request_with_auth("ws://127.0.0.1:9090/logs", Some("my-secret"))
+                .expect("request should be built");
+        let auth = request
+            .headers()
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok());
+        assert_eq!(auth, Some("Bearer my-secret"));
     }
 
     #[tokio::test]
