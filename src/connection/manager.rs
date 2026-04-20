@@ -180,7 +180,7 @@ mod tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(payload)
-            .expect(7)
+            .expect(8)
             .create_async()
             .await;
         let close_mock = server
