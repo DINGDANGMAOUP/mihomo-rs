@@ -593,6 +593,10 @@ mod tests {
 
     #[tokio::test]
     async fn list_profiles_ignores_non_yaml_entries() {
+        let _guard = env_lock().lock().await;
+        let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+
         let temp = tempdir().expect("create temp dir");
         let manager =
             ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
@@ -610,10 +614,18 @@ mod tests {
 
         let profiles = manager.list_profiles().await.expect("list profiles");
         assert!(profiles.is_empty());
+
+        if let Some(value) = old_value {
+            std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+        }
     }
 
     #[tokio::test]
     async fn get_current_path_uses_selected_profile() {
+        let _guard = env_lock().lock().await;
+        let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+
         let temp = tempdir().expect("create temp dir");
         let manager =
             ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
@@ -638,10 +650,18 @@ mod tests {
                 .expect("resolve config dir")
                 .join("alpha.yaml")
         );
+
+        if let Some(value) = old_value {
+            std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+        }
     }
 
     #[tokio::test]
     async fn unit_module_profile_lifecycle_hits_file_branches() {
+        let _guard = env_lock().lock().await;
+        let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+
         let temp = tempdir().expect("create temp dir");
         let manager =
             ConfigManager::with_home(temp.path().to_path_buf()).expect("create config manager");
@@ -686,11 +706,21 @@ mod tests {
                 .expect("resolve config dir")
                 .join("alpha.yaml")
         );
-        assert!(manager
-            .ensure_external_controller()
+
+        manager
+            .save(
+                "alpha",
+                "port: 7890\nsocks-port: 7891\nexternal-controller: https://example.com:18443\n",
+            )
             .await
-            .expect("ensure external controller")
-            .starts_with("http://127.0.0.1:"));
+            .expect("rewrite alpha with remote external controller");
+        assert_eq!(
+            manager
+                .ensure_external_controller()
+                .await
+                .expect("ensure external controller"),
+            "https://example.com:18443"
+        );
 
         manager
             .delete_profile("beta")
@@ -701,10 +731,18 @@ mod tests {
             .expect("resolve config dir")
             .join("beta.yaml")
             .exists());
+
+        if let Some(value) = old_value {
+            std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+        }
     }
 
     #[tokio::test]
     async fn resolve_config_dir_supports_paths_config_in_settings() {
+        let _guard = env_lock().lock().await;
+        let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+
         let temp = tempdir().expect("create temp dir");
         let home = temp.path().to_path_buf();
         let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -721,6 +759,10 @@ mod tests {
             .expect("resolve config dir info");
         assert_eq!(resolved.path, home.join("cloud/configs"));
         assert_eq!(resolved.source, ConfigDirSource::Settings);
+
+        if let Some(value) = old_value {
+            std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+        }
     }
 
     #[tokio::test]
@@ -756,6 +798,10 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_config_dir_defaults_when_not_configured() {
+        let _guard = env_lock().lock().await;
+        let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+
         let temp = tempdir().expect("create temp dir");
         let home = temp.path().to_path_buf();
         let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -765,5 +811,9 @@ mod tests {
             .expect("resolve config dir info");
         assert_eq!(resolved.path, home.join("configs"));
         assert_eq!(resolved.source, ConfigDirSource::Default);
+
+        if let Some(value) = old_value {
+            std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+        }
     }
 }

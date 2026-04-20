@@ -3,6 +3,7 @@ use crate::config::ConfigManager;
 use crate::connection::ConnectionManager;
 use crate::core::{Connection, MihomoClient};
 use anyhow::bail;
+use std::cmp::Reverse;
 use std::io::{self, Write};
 
 enum CloseTarget {
@@ -54,7 +55,8 @@ pub async fn handle_connection(action: ConnectionAction) -> anyhow::Result<()> {
 
                 if !snapshot.connections.is_empty() {
                     let mut sorted = snapshot.connections.clone();
-                    sorted.sort_by(|a, b| (b.download + b.upload).cmp(&(a.download + a.upload)));
+                    sorted
+                        .sort_by_key(|connection| Reverse(connection.download + connection.upload));
                     println!("\nTop 3 by traffic:");
                     for (i, conn) in sorted.iter().take(3).enumerate() {
                         let host = if !conn.metadata.host.is_empty() {
