@@ -163,6 +163,31 @@ async fn run_cli_command_covers_config_version_and_service_paths() {
     .await
     .expect("config list");
     run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Set {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+            value: "icloud/configs".to_string(),
+        },
+    })
+    .await
+    .expect("config set configs-dir");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Unset {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+        },
+    })
+    .await
+    .expect("config unset configs-dir");
+    run_cli_command(Commands::Config {
         action: ConfigAction::Show {
             profile: Some("default".to_string()),
         },
@@ -765,6 +790,11 @@ async fn run_cli_command_covers_config_and_proxy_empty_branches() {
     })
     .await
     .expect("config list empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path empty");
 
     // Invalid config.toml makes get_current() fail and triggers show fallback closure.
     tokio::fs::write(temp.path().join("config.toml"), "default = [")
@@ -818,6 +848,119 @@ async fn run_cli_command_covers_config_and_proxy_empty_branches() {
     .expect("proxy current empty");
 
     mock_proxies.assert_async().await;
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_covers_config_path_empty_state() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::List,
+    })
+    .await
+    .expect("config list empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path empty");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_current_uses_special_character_configs_dir() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    let cm = ConfigManager::new().expect("config manager");
+    cm.set_configs_dir("iCloud Drive/代理配置 (测试) [v2] #1 & team")
+        .await
+        .expect("set special configs dir");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
+    cm.set_current("default")
+        .await
+        .expect("set default current");
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current with special dir");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path with special dir");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_sets_and_unsets_configs_dir() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Set {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+            value: "iCloud Drive/Clash Configs".to_string(),
+        },
+    })
+    .await
+    .expect("config set configs-dir");
+
+    let settings = tokio::fs::read_to_string(temp.path().join("config.toml"))
+        .await
+        .expect("read config.toml");
+    assert!(settings.contains("configs_dir = \"iCloud Drive/Clash Configs\""));
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Unset {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+        },
+    })
+    .await
+    .expect("config unset configs-dir");
+
+    let settings = tokio::fs::read_to_string(temp.path().join("config.toml"))
+        .await
+        .expect("read config.toml after unset");
+    assert!(!settings.contains("configs_dir"));
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);

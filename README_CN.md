@@ -111,7 +111,7 @@ cargo run --example 01_bootstrap
 ## 命令总览
 
 - 版本：`install`、`update`、`default`、`list`、`list-remote`、`uninstall`
-- 配置：`config list|use|show|delete`
+- 配置：`config list|current|path|set|unset|use|show|delete`
 - 服务：`start`、`stop`、`restart`、`status`
 - 代理：`proxy list|groups|switch|test|current`
 - 监控：`logs`、`traffic`、`memory`
@@ -133,6 +133,26 @@ cargo run --example 01_bootstrap
 
 ```bash
 export MIHOMO_HOME=/custom/path
+```
+
+如果只想把 profile 配置放到 iCloud 或其他云同步目录，而版本、PID 等运行文件仍保留在本地，
+可以在 `config.toml` 里单独配置 `configs` 目录：
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+也可以临时通过环境变量覆盖：
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+也可以直接通过 CLI 写入 `config.toml`：
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
 ```
 
 ## 开发

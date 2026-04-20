@@ -1,5 +1,5 @@
 use crate::core::{validate_profile_name, validate_version_name};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 fn parse_profile_arg(value: &str) -> std::result::Result<String, String> {
     validate_profile_name(value)
@@ -119,6 +119,26 @@ pub enum ConfigAction {
     #[command(about = "List config profiles")]
     List,
 
+    #[command(about = "Show current profile and config path")]
+    Current,
+
+    #[command(about = "Show resolved config directory path")]
+    Path,
+
+    #[command(about = "Set a config option")]
+    Set {
+        #[arg(help = "Config key", value_enum)]
+        key: ConfigKey,
+        #[arg(help = "Config value")]
+        value: String,
+    },
+
+    #[command(about = "Unset a config option")]
+    Unset {
+        #[arg(help = "Config key", value_enum)]
+        key: ConfigKey,
+    },
+
     #[command(about = "Switch to a profile")]
     Use {
         #[arg(help = "Profile name", value_parser = parse_profile_arg)]
@@ -138,9 +158,14 @@ pub enum ConfigAction {
     },
 }
 
+#[derive(Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum ConfigKey {
+    ConfigsDir,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, ConfigAction};
+    use super::{Cli, Commands, ConfigAction, ConfigKey};
     use clap::Parser;
 
     #[test]
@@ -174,6 +199,60 @@ mod tests {
                 action: ConfigAction::Show { profile },
             } => assert_eq!(profile.as_deref(), Some("alpha-1.2_ok")),
             _ => panic!("expected config show command"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_config_path_command() {
+        let path =
+            Cli::try_parse_from(["mihomo-rs", "config", "path"]).expect("config path should parse");
+        match path.command {
+            Commands::Config {
+                action: ConfigAction::Path,
+            } => {}
+            _ => panic!("expected config path command"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_config_current_command() {
+        let current = Cli::try_parse_from(["mihomo-rs", "config", "current"])
+            .expect("config current should parse");
+        match current.command {
+            Commands::Config {
+                action: ConfigAction::Current,
+            } => {}
+            _ => panic!("expected config current command"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_config_set_and_unset_commands() {
+        let set = Cli::try_parse_from([
+            "mihomo-rs",
+            "config",
+            "set",
+            "configs-dir",
+            "~/Library/Mobile Documents/mihomo-rs/configs",
+        ])
+        .expect("config set should parse");
+        match set.command {
+            Commands::Config {
+                action: ConfigAction::Set { key, value },
+            } => {
+                assert_eq!(key, ConfigKey::ConfigsDir);
+                assert_eq!(value, "~/Library/Mobile Documents/mihomo-rs/configs");
+            }
+            _ => panic!("expected config set command"),
+        }
+
+        let unset = Cli::try_parse_from(["mihomo-rs", "config", "unset", "configs-dir"])
+            .expect("config unset should parse");
+        match unset.command {
+            Commands::Config {
+                action: ConfigAction::Unset { key },
+            } => assert_eq!(key, ConfigKey::ConfigsDir),
+            _ => panic!("expected config unset command"),
         }
     }
 }

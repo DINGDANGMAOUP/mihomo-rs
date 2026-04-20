@@ -111,7 +111,7 @@ See [examples/README.md](./examples/README.md) for details.
 ## CLI Command Map
 
 - Version: `install`, `update`, `default`, `list`, `list-remote`, `uninstall`
-- Config: `config list|use|show|delete`
+- Config: `config list|current|path|set|unset|use|show|delete`
 - Service: `start`, `stop`, `restart`, `status`
 - Proxy: `proxy list|groups|switch|test|current`
 - Telemetry: `logs`, `traffic`, `memory`
@@ -133,6 +133,26 @@ Override with:
 
 ```bash
 export MIHOMO_HOME=/custom/path
+```
+
+To keep only profile files in a cloud-synced folder while leaving binaries and runtime files local,
+set a dedicated config directory in `config.toml`:
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+You can also override it temporarily with:
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+Or write it into `config.toml` via CLI:
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
 ```
 
 ## Development

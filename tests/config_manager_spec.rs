@@ -203,3 +203,143 @@ async fn get_current_path_tracks_selected_profile_file() {
     let current_path = manager.get_current_path().await.expect("get current path");
     assert_eq!(current_path, home.join("configs/alpha.yaml"));
 }
+
+#[tokio::test]
+async fn custom_configs_dir_in_settings_is_used_for_profile_io() {
+    let temp = setup_temp_home();
+    let home = temp_home_path(&temp);
+    let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
+
+    fs::write(
+        home.join("config.toml"),
+        "[paths]\nconfigs_dir = \"icloud/configs\"\n",
+    )
+    .await
+    .expect("write custom configs dir");
+
+    manager
+        .save("cloud", &default_test_config())
+        .await
+        .expect("save cloud profile");
+    manager
+        .set_current("cloud")
+        .await
+        .expect("set current cloud profile");
+
+    let profiles = manager.list_profiles().await.expect("list profiles");
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].path, home.join("icloud/configs/cloud.yaml"));
+
+    let current_path = manager.get_current_path().await.expect("get current path");
+    assert_eq!(current_path, home.join("icloud/configs/cloud.yaml"));
+    assert!(home.join("icloud/configs/cloud.yaml").exists());
+}
+
+#[tokio::test]
+async fn set_and_unset_configs_dir_updates_settings_and_preserves_default_profile() {
+    let temp = setup_temp_home();
+    let home = temp_home_path(&temp);
+    let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
+
+    fs::write(home.join("config.toml"), "[default]\nprofile = \"work\"\n")
+        .await
+        .expect("write config with default profile");
+
+    let resolved = manager
+        .set_configs_dir("~/Library/Mobile Documents/mihomo-rs/configs")
+        .await
+        .expect("set configs dir");
+    assert!(resolved.ends_with("Library/Mobile Documents/mihomo-rs/configs"));
+
+    let content = fs::read_to_string(home.join("config.toml"))
+        .await
+        .expect("read config");
+    let config: toml::Value = toml::from_str(&content).expect("parse config");
+    assert_eq!(
+        config
+            .get("default")
+            .and_then(|v| v.get("profile"))
+            .and_then(|v| v.as_str()),
+        Some("work")
+    );
+    assert_eq!(
+        config
+            .get("paths")
+            .and_then(|v| v.get("configs_dir"))
+            .and_then(|v| v.as_str()),
+        Some("~/Library/Mobile Documents/mihomo-rs/configs")
+    );
+
+    let unset_resolved = manager
+        .unset_configs_dir()
+        .await
+        .expect("unset configs dir");
+    assert_eq!(unset_resolved, home.join("configs"));
+
+    let content = fs::read_to_string(home.join("config.toml"))
+        .await
+        .expect("read config after unset");
+    let config: toml::Value = toml::from_str(&content).expect("parse config after unset");
+    assert_eq!(
+        config
+            .get("default")
+            .and_then(|v| v.get("profile"))
+            .and_then(|v| v.as_str()),
+        Some("work")
+    );
+    assert!(config
+        .get("paths")
+        .and_then(|v| v.get("configs_dir"))
+        .is_none());
+}
+
+#[tokio::test]
+async fn set_configs_dir_rejects_empty_path() {
+    let temp = setup_temp_home();
+    let home = temp_home_path(&temp);
+    let manager = ConfigManager::with_home(home).expect("create config manager");
+
+    let err = manager
+        .set_configs_dir("   ")
+        .await
+        .expect_err("empty path should fail");
+    assert!(matches!(err, MihomoError::Config(_)));
+}
+
+#[tokio::test]
+async fn special_character_configs_dir_roundtrips_and_updates_current_path() {
+    let temp = setup_temp_home();
+    let home = temp_home_path(&temp);
+    let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
+
+    let special_path = "iCloud Drive/代理配置 (测试) [v2] #1 & team";
+    let resolved = manager
+        .set_configs_dir(special_path)
+        .await
+        .expect("set special configs dir");
+    assert_eq!(resolved, home.join(special_path));
+
+    manager
+        .save("alpha", &default_test_config())
+        .await
+        .expect("save alpha in special dir");
+    manager
+        .set_current("alpha")
+        .await
+        .expect("set alpha current");
+
+    let current_path = manager.get_current_path().await.expect("get current path");
+    assert_eq!(current_path, home.join(special_path).join("alpha.yaml"));
+
+    let content = fs::read_to_string(home.join("config.toml"))
+        .await
+        .expect("read config with special path");
+    let config: toml::Value = toml::from_str(&content).expect("parse config with special path");
+    assert_eq!(
+        config
+            .get("paths")
+            .and_then(|v| v.get("configs_dir"))
+            .and_then(|v| v.as_str()),
+        Some(special_path)
+    );
+}

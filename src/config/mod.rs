@@ -1,5 +1,5 @@
 pub mod manager;
 pub mod profile;
 
-pub use manager::ConfigManager;
+pub use manager::{ConfigDirInfo, ConfigDirSource, ConfigManager};
 pub use profile::Profile;
