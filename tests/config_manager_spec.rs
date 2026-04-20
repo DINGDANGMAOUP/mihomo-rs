@@ -294,6 +294,34 @@ async fn set_and_unset_configs_dir_updates_settings_and_preserves_default_profil
 }
 
 #[tokio::test]
+async fn set_and_unset_configs_dir_return_stored_paths_even_when_env_override_exists() {
+    let temp = setup_temp_home();
+    let home = temp_home_path(&temp);
+    let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
+
+    let old_value = std::env::var("MIHOMO_CONFIGS_DIR").ok();
+    std::env::set_var("MIHOMO_CONFIGS_DIR", home.join("env-override"));
+
+    let resolved = manager
+        .set_configs_dir("icloud/configs")
+        .await
+        .expect("set configs dir");
+    assert_eq!(resolved, home.join("icloud/configs"));
+
+    let unset_resolved = manager
+        .unset_configs_dir()
+        .await
+        .expect("unset configs dir");
+    assert_eq!(unset_resolved, home.join("configs"));
+
+    if let Some(value) = old_value {
+        std::env::set_var("MIHOMO_CONFIGS_DIR", value);
+    } else {
+        std::env::remove_var("MIHOMO_CONFIGS_DIR");
+    }
+}
+
+#[tokio::test]
 async fn set_configs_dir_rejects_empty_path() {
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);

@@ -31,7 +31,7 @@ impl ConnectionManager {
         let connections = self.list().await?;
         let filtered: Vec<Connection> = connections
             .into_iter()
-            .filter(|c| c.metadata.host.contains(host))
+            .filter(|c| matches_host_filter(c, host))
             .collect();
         log::debug!(
             "Filtered {} connections matching host '{}'",
@@ -103,6 +103,11 @@ impl ConnectionManager {
     }
 }
 
+fn matches_host_filter(connection: &Connection, host_filter: &str) -> bool {
+    connection.metadata.host.contains(host_filter)
+        || connection.metadata.destination_ip.contains(host_filter)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +159,17 @@ mod tests {
         assert_eq!(conn.download, 2048);
     }
 
+    #[test]
+    fn host_filter_matches_host_or_destination_ip() {
+        let by_host = create_test_connection("by-host", "example.com", "/usr/bin/app", "DIRECT");
+        let mut by_ip = create_test_connection("by-ip", "", "/usr/bin/app", "DIRECT");
+        by_ip.metadata.destination_ip = "4.4.4.4".to_string();
+
+        assert!(matches_host_filter(&by_host, "example"));
+        assert!(matches_host_filter(&by_ip, "4.4.4"));
+        assert!(!matches_host_filter(&by_ip, "example"));
+    }
+
     #[tokio::test]
     async fn test_manager_methods_with_mock_server() {
         let mut server = Server::new_async().await;
@@ -187,6 +203,7 @@ mod tests {
             manager.filter_by_host("example").await.expect("host").len(),
             1
         );
+        assert_eq!(manager.filter_by_host("1.1.1").await.expect("ip").len(), 1);
         assert_eq!(
             manager
                 .filter_by_process("Safari")

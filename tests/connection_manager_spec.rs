@@ -40,7 +40,7 @@ async fn filter_methods_match_expected_connections() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(common::mock_connections_payload())
-        .expect(3)
+        .expect(4)
         .create_async()
         .await;
 
@@ -51,6 +51,10 @@ async fn filter_methods_match_expected_connections() {
         .filter_by_host("example")
         .await
         .expect("filter by host");
+    let by_ip = manager
+        .filter_by_host("8.8.8.8")
+        .await
+        .expect("filter by ip");
     let by_process = manager
         .filter_by_process("Firefox")
         .await
@@ -64,6 +68,8 @@ async fn filter_methods_match_expected_connections() {
 
     assert_eq!(by_host.len(), 1);
     assert_eq!(by_host[0].id, "c1");
+    assert_eq!(by_ip.len(), 1);
+    assert_eq!(by_ip[0].id, "c2");
 
     assert_eq!(by_process.len(), 1);
     assert_eq!(by_process[0].id, "c2");
