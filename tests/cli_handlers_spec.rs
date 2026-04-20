@@ -644,7 +644,13 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(edge_connections)
-        .expect(2)
+        .expect(5)
+        .create_async()
+        .await;
+    let close_edge = server
+        .mock("DELETE", "/connections/abc123456789")
+        .with_status(204)
+        .expect(1)
         .create_async()
         .await;
 
@@ -702,6 +708,21 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
     })
     .await
     .expect("connection filter process edge payload");
+    run_cli_command(Commands::Connection {
+        action: ConnectionAction::FilterHost {
+            host: "4.4.4.4".to_string(),
+        },
+    })
+    .await
+    .expect("connection filter host by ip");
+    run_cli_command(Commands::Connection {
+        action: ConnectionAction::CloseByHost {
+            host: "4.4.4.4".to_string(),
+            force: true,
+        },
+    })
+    .await
+    .expect("connection close by ip");
 
     // Stream one snapshot then close to exercise stream rendering branches.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -739,6 +760,7 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
 
     mock_empty.assert_async().await;
     mock_edge.assert_async().await;
+    close_edge.assert_async().await;
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);

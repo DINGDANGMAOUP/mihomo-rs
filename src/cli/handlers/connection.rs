@@ -134,7 +134,9 @@ async fn load_connections(
 ) -> crate::core::Result<Vec<Connection>> {
     let mut connections = conn_mgr.list().await?;
     if let Some(host_filter) = host {
-        connections.retain(|c| c.metadata.host.contains(host_filter));
+        connections.retain(|c| {
+            c.metadata.host.contains(host_filter) || c.metadata.destination_ip.contains(host_filter)
+        });
     }
     if let Some(process_filter) = process {
         connections.retain(|c| c.metadata.process_path.contains(process_filter));
