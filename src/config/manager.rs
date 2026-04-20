@@ -209,7 +209,7 @@ impl ConfigManager {
         }
 
         self.write_settings_value(&config).await?;
-        Ok(self.resolve_config_dir()?)
+        self.resolve_config_dir()
     }
 
     pub async fn unset_configs_dir(&self) -> Result<PathBuf> {
@@ -217,11 +217,9 @@ impl ConfigManager {
 
         if let toml::Value::Table(ref mut table) = config {
             let mut remove_paths_table = false;
-            if let Some(paths_table) = table.get_mut("paths") {
-                if let toml::Value::Table(paths) = paths_table {
-                    paths.remove("configs_dir");
-                    remove_paths_table = paths.is_empty();
-                }
+            if let Some(toml::Value::Table(paths)) = table.get_mut("paths") {
+                paths.remove("configs_dir");
+                remove_paths_table = paths.is_empty();
             }
 
             if remove_paths_table {
@@ -230,7 +228,7 @@ impl ConfigManager {
         }
 
         self.write_settings_value(&config).await?;
-        Ok(self.resolve_config_dir()?)
+        self.resolve_config_dir()
     }
 
     pub async fn load(&self, profile: &str) -> Result<String> {
