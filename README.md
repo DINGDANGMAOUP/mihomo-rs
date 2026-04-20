@@ -41,21 +41,21 @@ mihomo-rs = "*"
 
 ```bash
 # 1) Install and select a kernel version
-mihomo-rs install stable
-mihomo-rs list
-mihomo-rs default v1.19.17
+mihomo-rs version install stable
+mihomo-rs version list
+mihomo-rs version use v1.19.17
 
 # 2) Start service (auto-creates default config when missing)
-mihomo-rs start
-mihomo-rs status
+mihomo-rs service start
+mihomo-rs service status
 
 # 3) Proxy operations
 mihomo-rs proxy groups
 mihomo-rs proxy switch GLOBAL "Proxy-A"
 
 # 4) Observability
-mihomo-rs logs --level info
-mihomo-rs traffic
+mihomo-rs service logs --level info
+mihomo-rs service traffic
 mihomo-rs connection stats
 ```
 
@@ -110,12 +110,14 @@ See [examples/README.md](./examples/README.md) for details.
 
 ## CLI Command Map
 
-- Version: `install`, `update`, `default`, `list`, `list-remote`, `uninstall`
-- Config: `config list|use|show|delete`
-- Service: `start`, `stop`, `restart`, `status`
+- Version: `version install|update|use|list|list-remote|uninstall`
+- Config: `config list|current|path|set|unset|use|show|delete`
+- Service: `service start|stop|restart|status|logs|traffic|memory`
 - Proxy: `proxy list|groups|switch|test|current`
-- Telemetry: `logs`, `traffic`, `memory`
-- Connections: `connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
+- Connections: `connection list [--host ...] [--process ...]`, `connection stats|stream`, `connection close [--id ...|--all|--host ...|--process ...]`
+
+For proxies, `list` shows proxy nodes, `groups` shows selectable groups, and `current` shows each group's current selection.
+
 
 ## Data Directory
 
@@ -133,6 +135,26 @@ Override with:
 
 ```bash
 export MIHOMO_HOME=/custom/path
+```
+
+To keep only profile files in a cloud-synced folder while leaving binaries and runtime files local,
+set a dedicated config directory in `config.toml`:
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+You can also override it temporarily with:
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+Or write it into `config.toml` via CLI:
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
 ```
 
 ## Development

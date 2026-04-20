@@ -41,21 +41,21 @@ mihomo-rs = "*"
 
 ```bash
 # 1) 安装并设置版本
-mihomo-rs install stable
-mihomo-rs list
-mihomo-rs default v1.19.17
+mihomo-rs version install stable
+mihomo-rs version list
+mihomo-rs version use v1.19.17
 
 # 2) 启动服务（缺省配置会自动创建）
-mihomo-rs start
-mihomo-rs status
+mihomo-rs service start
+mihomo-rs service status
 
 # 3) 代理操作
 mihomo-rs proxy groups
 mihomo-rs proxy switch GLOBAL "Proxy-A"
 
 # 4) 监控
-mihomo-rs logs --level info
-mihomo-rs traffic
+mihomo-rs service logs --level info
+mihomo-rs service traffic
 mihomo-rs connection stats
 ```
 
@@ -110,12 +110,14 @@ cargo run --example 01_bootstrap
 
 ## 命令总览
 
-- 版本：`install`、`update`、`default`、`list`、`list-remote`、`uninstall`
-- 配置：`config list|use|show|delete`
-- 服务：`start`、`stop`、`restart`、`status`
+- 版本：`version install|update|use|list|list-remote|uninstall`
+- 配置：`config list|current|path|set|unset|use|show|delete`
+- 服务：`service start|stop|restart|status|logs|traffic|memory`
 - 代理：`proxy list|groups|switch|test|current`
-- 监控：`logs`、`traffic`、`memory`
-- 连接：`connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
+- 连接：`connection list [--host ...] [--process ...]`、`connection stats|stream`、`connection close [--id ...|--all|--host ...|--process ...]`
+
+其中 `proxy list` 用于查看代理节点，`proxy groups` 用于查看可切换分组，`proxy current` 用于查看各分组当前选择。
+
 
 ## 数据目录
 
@@ -133,6 +135,26 @@ cargo run --example 01_bootstrap
 
 ```bash
 export MIHOMO_HOME=/custom/path
+```
+
+如果只想把 profile 配置放到 iCloud 或其他云同步目录，而版本、PID 等运行文件仍保留在本地，
+可以在 `config.toml` 里单独配置 `configs` 目录：
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+也可以临时通过环境变量覆盖：
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+也可以直接通过 CLI 写入 `config.toml`：
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
 ```
 
 ## 开发
