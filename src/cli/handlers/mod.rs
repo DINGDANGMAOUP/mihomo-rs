@@ -9,6 +9,7 @@ use crate::cli::Commands;
 
 pub async fn run_cli_command(command: Commands) -> anyhow::Result<()> {
     match command {
+        Commands::Version { action } => version::handle_version(action).await,
         Commands::Install { version } => version::handle_install(version).await,
         Commands::Update => version::handle_update().await,
         Commands::Default { version } => version::handle_default(version).await,
@@ -16,6 +17,7 @@ pub async fn run_cli_command(command: Commands) -> anyhow::Result<()> {
         Commands::ListRemote { limit } => version::handle_list_remote(limit).await,
         Commands::Uninstall { version } => version::handle_uninstall(version).await,
         Commands::Config { action } => config::handle_config(action).await,
+        Commands::Service { action } => service::handle_service(action).await,
         Commands::Start => service::handle_start().await,
         Commands::Stop => service::handle_stop().await,
         Commands::Restart => service::handle_restart().await,

@@ -1,7 +1,20 @@
-use crate::cli::{print_info, print_success};
+use crate::cli::handlers::telemetry;
+use crate::cli::{print_info, print_success, ServiceAction};
 use crate::config::ConfigManager;
 use crate::service::{ServiceManager, ServiceStatus};
 use crate::version::VersionManager;
+
+pub async fn handle_service(action: ServiceAction) -> anyhow::Result<()> {
+    match action {
+        ServiceAction::Start => handle_start().await,
+        ServiceAction::Stop => handle_stop().await,
+        ServiceAction::Restart => handle_restart().await,
+        ServiceAction::Status => handle_status().await,
+        ServiceAction::Logs { level } => telemetry::handle_logs(level).await,
+        ServiceAction::Traffic => telemetry::handle_traffic().await,
+        ServiceAction::Memory => telemetry::handle_memory().await,
+    }
+}
 
 pub async fn handle_start() -> anyhow::Result<()> {
     let vm = VersionManager::new()?;

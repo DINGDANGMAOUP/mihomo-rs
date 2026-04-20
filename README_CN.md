@@ -41,21 +41,21 @@ mihomo-rs = "*"
 
 ```bash
 # 1) 安装并设置版本
-mihomo-rs install stable
-mihomo-rs list
-mihomo-rs default v1.19.17
+mihomo-rs version install stable
+mihomo-rs version list
+mihomo-rs version use v1.19.17
 
 # 2) 启动服务（缺省配置会自动创建）
-mihomo-rs start
-mihomo-rs status
+mihomo-rs service start
+mihomo-rs service status
 
 # 3) 代理操作
 mihomo-rs proxy groups
 mihomo-rs proxy switch GLOBAL "Proxy-A"
 
 # 4) 监控
-mihomo-rs logs --level info
-mihomo-rs traffic
+mihomo-rs service logs --level info
+mihomo-rs service traffic
 mihomo-rs connection stats
 ```
 
@@ -110,12 +110,14 @@ cargo run --example 01_bootstrap
 
 ## 命令总览
 
-- 版本：`install`、`update`、`default`、`list`、`list-remote`、`uninstall`
+- 版本：`version install|update|use|list|list-remote|uninstall`
 - 配置：`config list|current|path|set|unset|use|show|delete`
-- 服务：`start`、`stop`、`restart`、`status`
+- 服务：`service start|stop|restart|status|logs|traffic|memory`
 - 代理：`proxy list|groups|switch|test|current`
-- 监控：`logs`、`traffic`、`memory`
-- 连接：`connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
+- 连接：`connection list [--host ...] [--process ...]`、`connection stats|stream`、`connection close [--id ...|--all|--host ...|--process ...]`
+
+其中 `proxy list` 用于查看代理节点，`proxy groups` 用于查看可切换分组，`proxy current` 用于查看各分组当前选择。
+
 
 ## 数据目录
 
