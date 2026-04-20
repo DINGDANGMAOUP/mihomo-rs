@@ -2,7 +2,14 @@ mod common;
 
 use common::{config_without_controller, default_test_config, setup_temp_home, temp_home_path};
 use mihomo_rs::{ConfigManager, MihomoError};
+use std::sync::OnceLock;
 use tokio::fs;
+use tokio::sync::Mutex;
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 fn external_controller_of(content: &str) -> Option<String> {
     let value: serde_yaml::Value = serde_yaml::from_str(content).ok()?;
@@ -14,6 +21,8 @@ fn external_controller_of(content: &str) -> Option<String> {
 
 #[tokio::test]
 async fn profile_lifecycle_save_load_list_set_current() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -42,6 +51,8 @@ async fn profile_lifecycle_save_load_list_set_current() {
 
 #[tokio::test]
 async fn delete_profile_rejects_active_profile() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -67,6 +78,8 @@ async fn delete_profile_rejects_active_profile() {
 
 #[tokio::test]
 async fn ensure_default_config_creates_missing_profile_file() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -86,6 +99,8 @@ async fn ensure_default_config_creates_missing_profile_file() {
 
 #[tokio::test]
 async fn external_controller_normalization_and_preserve_unix_socket() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -132,6 +147,8 @@ external-controller: /var/run/mihomo.sock
 
 #[tokio::test]
 async fn ensure_external_controller_adds_missing_value() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -160,6 +177,8 @@ async fn ensure_external_controller_adds_missing_value() {
 
 #[tokio::test]
 async fn invalid_yaml_and_invalid_settings_file_return_errors() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -187,6 +206,8 @@ async fn invalid_yaml_and_invalid_settings_file_return_errors() {
 
 #[tokio::test]
 async fn get_current_path_tracks_selected_profile_file() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -206,6 +227,8 @@ async fn get_current_path_tracks_selected_profile_file() {
 
 #[tokio::test]
 async fn custom_configs_dir_in_settings_is_used_for_profile_io() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -237,6 +260,8 @@ async fn custom_configs_dir_in_settings_is_used_for_profile_io() {
 
 #[tokio::test]
 async fn set_and_unset_configs_dir_updates_settings_and_preserves_default_profile() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -295,6 +320,8 @@ async fn set_and_unset_configs_dir_updates_settings_and_preserves_default_profil
 
 #[tokio::test]
 async fn set_and_unset_configs_dir_return_stored_paths_even_when_env_override_exists() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
@@ -323,6 +350,8 @@ async fn set_and_unset_configs_dir_return_stored_paths_even_when_env_override_ex
 
 #[tokio::test]
 async fn set_configs_dir_rejects_empty_path() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home).expect("create config manager");
@@ -336,6 +365,8 @@ async fn set_configs_dir_rejects_empty_path() {
 
 #[tokio::test]
 async fn special_character_configs_dir_roundtrips_and_updates_current_path() {
+    let _guard = env_lock().lock().await;
+
     let temp = setup_temp_home();
     let home = temp_home_path(&temp);
     let manager = ConfigManager::with_home(home.clone()).expect("create config manager");
