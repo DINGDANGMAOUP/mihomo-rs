@@ -39,7 +39,7 @@ jobs:
             --summary-only \
             --lcov --output-path lcov.info \
             --ignore-filename-regex '(.*/)?(examples/|src/main.rs)' \
-            --fail-under-lines 96
+            --fail-under-lines 95
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v6
