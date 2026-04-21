@@ -192,7 +192,7 @@ impl ConfigManager {
 
     pub async fn set_configs_dir(&self, path: &str) -> Result<PathBuf> {
         let trimmed = path.trim();
-        let _ = self.normalize_configs_dir(trimmed)?;
+        let normalized = self.normalize_configs_dir(trimmed)?;
 
         let mut config = self.read_settings_value().await?;
         if let toml::Value::Table(ref mut table) = config {
@@ -209,7 +209,7 @@ impl ConfigManager {
         }
 
         self.write_settings_value(&config).await?;
-        self.resolve_config_dir()
+        Ok(normalized)
     }
 
     pub async fn unset_configs_dir(&self) -> Result<PathBuf> {
@@ -228,7 +228,7 @@ impl ConfigManager {
         }
 
         self.write_settings_value(&config).await?;
-        self.resolve_config_dir()
+        Ok(self.config_dir.clone())
     }
 
     pub async fn load(&self, profile: &str) -> Result<String> {
