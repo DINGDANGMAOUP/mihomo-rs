@@ -115,8 +115,52 @@ cargo run --example 01_bootstrap
 - 服务：`service start|stop|restart|status|logs|traffic|memory`
 - 代理：`proxy list|groups|switch|test|current`
 - 连接：`connection list [--host ...] [--process ...]`、`connection stats|stream`、`connection close [--id ...|--all|--host ...|--process ...]`
+- 诊断：`doctor run|fix|list|explain`
 
 其中 `proxy list` 用于查看代理节点，`proxy groups` 用于查看可切换分组，`proxy current` 用于查看各分组当前选择。
+
+## Doctor 诊断
+
+可以用 `doctor` 统一检查配置、版本、服务和 controller 状态。
+
+```bash
+# 运行默认检查集
+mihomo-rs doctor run
+
+# 只检查某个分类或单个 check id
+mihomo-rs doctor run --only config
+mihomo-rs doctor run --only service.stale_pid
+
+# 机器可读输出
+mihomo-rs doctor run --json
+mihomo-rs doctor fix --only service.stale_pid --json
+
+# 列出和解释检查项
+mihomo-rs doctor list
+mihomo-rs doctor explain controller.api_reachable
+```
+
+当前默认检查包括：
+
+- `config.toml` 解析和配置目录解析
+- 当前 profile 与 YAML 有效性
+- 默认版本二进制是否存在
+- PID 状态一致性与 stale pid 文件检测
+- `external-controller` 解析
+- 服务运行时的 controller API 探活
+
+`doctor fix` 目前只做保守且安全的修复：
+
+- 创建缺失的 configs 目录
+- 创建缺失的默认/当前配置文件
+- 在可安全推导时补齐或修正 `external-controller`
+- 删除陈旧或损坏的 `mihomo.pid`
+
+退出码约定：
+
+- `0`：doctor 执行完成，且没有 failing checks
+- `1`：doctor 执行完成，但发现了至少一个 failing check
+- `2`：doctor 自身执行异常
 
 
 ## 数据目录
