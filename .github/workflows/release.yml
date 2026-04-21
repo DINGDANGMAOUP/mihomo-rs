@@ -194,3 +194,57 @@ jobs:
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
         continue-on-error: false
+
+  publish-homebrew-tap:
+    name: Publish Homebrew Formula
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Check Homebrew tap settings
+        id: tap_settings
+        run: |
+          if [ -n "${HOMEBREW_TAP_REPO}" ] && [ -n "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Homebrew tap publishing skipped because HOMEBREW_TAP_REPO or HOMEBREW_TAP_TOKEN is not configured."
+          fi
+
+      - uses: actions/checkout@v6
+        if: steps.tap_settings.outputs.enabled == 'true'
+
+      - name: Checkout tap repository
+        if: steps.tap_settings.outputs.enabled == 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPO }}
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Generate formula
+        if: steps.tap_settings.outputs.enabled == 'true'
+        run: |
+          chmod +x .github/scripts/generate-homebrew-formula.sh
+          .github/scripts/generate-homebrew-formula.sh \
+            "${GITHUB_REPOSITORY}" \
+            "${GITHUB_REF_NAME}" \
+            "homebrew-tap/Formula/mihomo-rs.rb"
+
+      - name: Commit and push formula update
+        if: steps.tap_settings.outputs.enabled == 'true'
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mihomo-rs.rb
+          if git diff --cached --quiet; then
+            echo "No Homebrew formula changes to publish"
+            exit 0
+          fi
+          git commit -m "mihomo-rs ${GITHUB_REF_NAME}"
+          git push
