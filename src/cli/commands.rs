@@ -124,6 +124,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConnectionAction,
     },
+
+    #[command(about = "Read-only environment and runtime diagnostics")]
+    Doctor {
+        #[command(subcommand)]
+        action: DoctorAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -242,11 +248,43 @@ pub enum ConfigKey {
     ConfigsDir,
 }
 
+#[derive(Subcommand)]
+pub enum DoctorAction {
+    #[command(about = "Run doctor checks")]
+    Run {
+        #[arg(
+            long,
+            help = "Comma-separated check ids or categories to run (e.g. config.current_profile,config)"
+        )]
+        only: Option<String>,
+        #[arg(long, help = "Render the report as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Apply safe doctor fixes")]
+    Fix {
+        #[arg(
+            long,
+            help = "Comma-separated check ids or categories to fix (e.g. config.current_yaml,config)"
+        )]
+        only: Option<String>,
+    },
+
+    #[command(about = "List available doctor checks")]
+    List,
+
+    #[command(about = "Explain a doctor check")]
+    Explain {
+        #[arg(help = "Check id")]
+        check_id: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Cli, Commands, ConfigAction, ConfigKey, ConnectionAction, ProxyAction, ServiceAction,
-        VersionAction,
+        Cli, Commands, ConfigAction, ConfigKey, ConnectionAction, DoctorAction, ProxyAction,
+        ServiceAction, VersionAction,
     };
     use clap::{CommandFactory, Parser};
 
@@ -356,6 +394,59 @@ mod tests {
                 action: ServiceAction::Status,
             } => {}
             _ => panic!("expected service status command"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_doctor_commands() {
+        let run = Cli::try_parse_from([
+            "mihomo-rs",
+            "doctor",
+            "run",
+            "--only",
+            "config.current_profile,version.binary_available",
+            "--json",
+        ])
+        .expect("doctor run should parse");
+        match run.command {
+            Commands::Doctor {
+                action: DoctorAction::Run { only, json },
+            } => {
+                assert_eq!(
+                    only.as_deref(),
+                    Some("config.current_profile,version.binary_available")
+                );
+                assert!(json);
+            }
+            _ => panic!("expected doctor run command"),
+        }
+
+        let list =
+            Cli::try_parse_from(["mihomo-rs", "doctor", "list"]).expect("doctor list should parse");
+        match list.command {
+            Commands::Doctor {
+                action: DoctorAction::List,
+            } => {}
+            _ => panic!("expected doctor list command"),
+        }
+
+        let fix = Cli::try_parse_from(["mihomo-rs", "doctor", "fix", "--only", "config"])
+            .expect("doctor fix should parse");
+        match fix.command {
+            Commands::Doctor {
+                action: DoctorAction::Fix { only },
+            } => assert_eq!(only.as_deref(), Some("config")),
+            _ => panic!("expected doctor fix command"),
+        }
+
+        let explain =
+            Cli::try_parse_from(["mihomo-rs", "doctor", "explain", "config.current_yaml"])
+                .expect("doctor explain should parse");
+        match explain.command {
+            Commands::Doctor {
+                action: DoctorAction::Explain { check_id },
+            } => assert_eq!(check_id, "config.current_yaml"),
+            _ => panic!("expected doctor explain command"),
         }
     }
 

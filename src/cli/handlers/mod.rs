@@ -1,5 +1,6 @@
 mod config;
 mod connection;
+mod doctor;
 mod proxy;
 mod service;
 mod telemetry;
@@ -27,6 +28,7 @@ pub async fn run_cli_command(command: Commands) -> anyhow::Result<()> {
         Commands::Traffic => telemetry::handle_traffic().await,
         Commands::Memory => telemetry::handle_memory().await,
         Commands::Connection { action } => connection::handle_connection(action).await,
+        Commands::Doctor { action } => doctor::handle_doctor(action).await,
     }
 }
 

@@ -4,8 +4,8 @@ pub mod handlers;
 pub mod output;
 
 pub use commands::{
-    Cli, Commands, ConfigAction, ConfigKey, ConnectionAction, ProxyAction, ServiceAction,
-    VersionAction,
+    Cli, Commands, ConfigAction, ConfigKey, ConnectionAction, DoctorAction, ProxyAction,
+    ServiceAction, VersionAction,
 };
 pub use error_hint::format_cli_error;
 pub use handlers::run_cli_command;
