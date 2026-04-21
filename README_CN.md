@@ -40,6 +40,12 @@ brew install mihomo-rs
 mihomo-rs --help
 ```
 
+也可以不单独执行 `tap`，直接安装：
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
 升级：
 
 ```bash
@@ -235,6 +241,7 @@ cargo test
 - GitHub Releases 继续作为二进制分发源
 - tap 仓库 `DINGDANGMAOUP/homebrew-mihomo-rs` 保存 `Formula/mihomo-rs.rb`
 - 用户后续升级直接走标准 Homebrew 流程：`brew update && brew upgrade mihomo-rs`
+- tap 仓库地址：[DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## 安全
 

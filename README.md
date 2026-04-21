@@ -40,6 +40,12 @@ brew install mihomo-rs
 mihomo-rs --help
 ```
 
+Or install directly without a separate tap step:
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
 Upgrade with:
 
 ```bash
@@ -235,6 +241,7 @@ Tagged releases update the dedicated Homebrew tap automatically.
 - Release archives are published on GitHub Releases.
 - The tap repository `DINGDANGMAOUP/homebrew-mihomo-rs` stores `Formula/mihomo-rs.rb`.
 - Users upgrade with standard Homebrew flow: `brew update && brew upgrade mihomo-rs`.
+- Tap repository: [DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## Security
 
