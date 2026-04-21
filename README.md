@@ -30,6 +30,29 @@ Rust SDK and CLI for [mihomo](https://github.com/MetaCubeX/mihomo): version inst
 cargo install mihomo-rs
 ```
 
+Homebrew:
+
+```bash
+brew tap dingdangmaoup/mihomo-rs
+brew install mihomo-rs
+
+# Global command
+mihomo-rs --help
+```
+
+Or install directly without a separate tap step:
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
+Upgrade with:
+
+```bash
+brew update
+brew upgrade mihomo-rs
+```
+
 Library usage:
 
 ```toml
@@ -210,6 +233,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
+
+## Release To Homebrew
+
+Tagged releases update the dedicated Homebrew tap automatically.
+
+- Release archives are published on GitHub Releases.
+- The tap repository `DINGDANGMAOUP/homebrew-mihomo-rs` stores `Formula/mihomo-rs.rb`.
+- Users upgrade with standard Homebrew flow: `brew update && brew upgrade mihomo-rs`.
+- Tap repository: [DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## Security
 

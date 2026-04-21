@@ -30,6 +30,29 @@
 cargo install mihomo-rs
 ```
 
+Homebrew：
+
+```bash
+brew tap dingdangmaoup/mihomo-rs
+brew install mihomo-rs
+
+# 全局命令
+mihomo-rs --help
+```
+
+也可以不单独执行 `tap`，直接安装：
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
+升级：
+
+```bash
+brew update
+brew upgrade mihomo-rs
+```
+
 作为库使用：
 
 ```toml
@@ -210,6 +233,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
+
+## 发布到 Homebrew
+
+打 tag 发布后，会自动更新独立的 Homebrew tap：
+
+- GitHub Releases 继续作为二进制分发源
+- tap 仓库 `DINGDANGMAOUP/homebrew-mihomo-rs` 保存 `Formula/mihomo-rs.rb`
+- 用户后续升级直接走标准 Homebrew 流程：`brew update && brew upgrade mihomo-rs`
+- tap 仓库地址：[DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## 安全
 
