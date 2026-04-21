@@ -1,6 +1,6 @@
 use crate::config::ConfigManager;
 use crate::core::{get_home_dir, MihomoClient, MihomoError};
-use crate::service::{ServiceManager, ServiceStatus};
+use crate::service::{process, ServiceManager, ServiceStatus};
 use crate::version::VersionManager;
 use serde::Serialize;
 use std::fmt;
@@ -167,6 +167,16 @@ const CHECKS: &[DoctorCheckMeta] = &[
         default_enabled: true,
     },
     DoctorCheckMeta {
+        id: "service.stale_pid",
+        category: "service",
+        summary: "pid file does not point to a stale process",
+        why: "A stale or malformed pid file makes service status and restart behavior confusing.",
+        fail_means: "The pid file is malformed or points to a dead or mismatched process.",
+        hint: "Run doctor fix --only service.stale_pid to remove the stale pid file.",
+        fixable: true,
+        default_enabled: true,
+    },
+    DoctorCheckMeta {
         id: "controller.external_controller",
         category: "controller",
         summary: "external-controller resolves to a usable URL",
@@ -233,6 +243,9 @@ pub async fn run_doctor(options: DoctorRunOptions) -> DoctorReport {
     if filter.matches("service.pid_state", "service") {
         checks.push(check_service_pid_state().await);
     }
+    if filter.matches("service.stale_pid", "service") {
+        checks.push(check_stale_pid().await);
+    }
     if filter.matches("controller.external_controller", "controller") {
         checks.push(check_external_controller().await);
     }
@@ -263,6 +276,11 @@ pub async fn fix_doctor(options: DoctorRunOptions) -> anyhow::Result<DoctorFixRe
     }
     if filter.matches("controller.external_controller", "controller") {
         if let Some(fix) = fix_external_controller().await? {
+            fixes.push(fix);
+        }
+    }
+    if filter.matches("service.stale_pid", "service") {
+        if let Some(fix) = fix_stale_pid().await? {
             fixes.push(fix);
         }
     }
@@ -552,6 +570,52 @@ async fn check_external_controller() -> DoctorCheckResult {
     }
 }
 
+async fn check_stale_pid() -> DoctorCheckResult {
+    let pid_file = pid_file_path();
+    check_stale_pid_at(&pid_file).await
+}
+
+async fn check_stale_pid_at(pid_file: &PathBuf) -> DoctorCheckResult {
+    if !pid_file.exists() {
+        return pass_result(
+            "service.stale_pid",
+            "service",
+            "No pid file is present",
+            None,
+        );
+    }
+
+    match process::read_pid_record(&pid_file).await {
+        Ok(record) => {
+            if process::is_process_alive_checked(record.pid, record.start_time) {
+                pass_result(
+                    "service.stale_pid",
+                    "service",
+                    &format!("pid file '{}' tracks a live process", pid_file.display()),
+                    None,
+                )
+            } else {
+                warn_result(
+                    "service.stale_pid",
+                    "service",
+                    &format!(
+                        "pid file '{}' points to stale process {}",
+                        pid_file.display(),
+                        record.pid
+                    ),
+                    Some("Run doctor fix --only service.stale_pid to remove it."),
+                )
+            }
+        }
+        Err(err) => warn_result(
+            "service.stale_pid",
+            "service",
+            &format!("pid file '{}' is invalid: {}", pid_file.display(), err),
+            Some("Run doctor fix --only service.stale_pid to remove it."),
+        ),
+    }
+}
+
 async fn check_controller_api_reachable() -> DoctorCheckResult {
     match current_service_status().await {
         Ok(ServiceStatus::Stopped) => {
@@ -673,6 +737,32 @@ async fn fix_external_controller() -> anyhow::Result<Option<DoctorFixAction>> {
     }))
 }
 
+async fn fix_stale_pid() -> anyhow::Result<Option<DoctorFixAction>> {
+    let pid_file = pid_file_path();
+    fix_stale_pid_at(&pid_file).await
+}
+
+async fn fix_stale_pid_at(pid_file: &PathBuf) -> anyhow::Result<Option<DoctorFixAction>> {
+    if !pid_file.exists() {
+        return Ok(None);
+    }
+
+    let should_remove = match process::read_pid_record(&pid_file).await {
+        Ok(record) => !process::is_process_alive_checked(record.pid, record.start_time),
+        Err(_) => true,
+    };
+
+    if !should_remove {
+        return Ok(None);
+    }
+
+    process::remove_pid_file(&pid_file).await?;
+    Ok(Some(DoctorFixAction {
+        id: "service.stale_pid".to_string(),
+        summary: format!("Removed stale pid file '{}'", pid_file.display()),
+    }))
+}
+
 fn home_settings_path(manager: &ConfigManager) -> PathBuf {
     current_home_of(manager).join("config.toml")
 }
@@ -684,6 +774,12 @@ fn current_home_of(_manager: &ConfigManager) -> PathBuf {
 async fn current_service_status() -> crate::core::Result<ServiceStatus> {
     let service = ServiceManager::new(PathBuf::from("mihomo"), PathBuf::from("config.yaml"));
     service.status().await
+}
+
+fn pid_file_path() -> PathBuf {
+    get_home_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("mihomo.pid")
 }
 
 fn unix_ts() -> u64 {
@@ -742,6 +838,8 @@ mod tests {
     use super::{
         explain_check, fix_doctor, list_checks, run_doctor, DoctorRunOptions, DoctorStatus,
     };
+    use crate::service::process;
+    use tempfile::tempdir;
 
     #[test]
     fn explain_known_check() {
@@ -760,6 +858,7 @@ mod tests {
         assert!(checks
             .iter()
             .any(|check| check.id == "version.binary_available"));
+        assert!(checks.iter().any(|check| check.id == "service.stale_pid"));
         assert!(checks
             .iter()
             .any(|check| check.id == "controller.api_reachable"));
@@ -772,7 +871,7 @@ mod tests {
         })
         .await;
 
-        assert_eq!(report.checks.len(), 2);
+        assert_eq!(report.checks.len(), 3);
         assert!(report
             .checks
             .iter()
@@ -781,6 +880,10 @@ mod tests {
             .checks
             .iter()
             .any(|check| check.id == "service.pid_state"));
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.id == "service.stale_pid"));
     }
 
     #[test]
@@ -821,5 +924,23 @@ mod tests {
         .await
         .expect("fix doctor");
         assert!(report.fixes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stale_pid_check_warns_and_fix_removes_file() {
+        let temp = tempdir().expect("tempdir");
+        let pid_file = temp.path().join("mihomo.pid");
+        process::write_pid_record(&pid_file, u32::MAX, Some(1))
+            .await
+            .expect("write stale pid");
+
+        let report = super::check_stale_pid_at(&pid_file).await;
+        assert_eq!(report.status, DoctorStatus::Warn);
+
+        let fixed = super::fix_stale_pid_at(&pid_file)
+            .await
+            .expect("fix stale pid");
+        assert!(fixed.is_some());
+        assert!(!pid_file.exists());
     }
 }

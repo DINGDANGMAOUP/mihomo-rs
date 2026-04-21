@@ -3,7 +3,7 @@ use crate::doctor::{
     explain_check, fix_doctor, list_checks, run_doctor, DoctorRunOptions, DoctorStatus,
 };
 
-pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<()> {
+pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<i32> {
     match action {
         DoctorAction::Run { only, json } => {
             let report = run_doctor(DoctorRunOptions { only }).await;
@@ -13,9 +13,7 @@ pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<()> {
                 print_doctor_report(&report);
             }
 
-            if report.has_failures() {
-                anyhow::bail!("doctor found failing checks");
-            }
+            return Ok(if report.has_failures() { 1 } else { 0 });
         }
         DoctorAction::List => {
             let rows = list_checks()
@@ -40,9 +38,11 @@ pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<()> {
                 .collect();
             print_table(&["ID", "Category", "Fixable", "Default", "Summary"], rows);
         }
-        DoctorAction::Fix { only } => {
+        DoctorAction::Fix { only, json } => {
             let report = fix_doctor(DoctorRunOptions { only }).await?;
-            if report.fixes.is_empty() {
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else if report.fixes.is_empty() {
                 print_info("No safe doctor fixes matched the filter");
             } else {
                 let rows = report
@@ -69,7 +69,7 @@ pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<()> {
         }
     }
 
-    Ok(())
+    Ok(0)
 }
 
 fn print_doctor_report(report: &crate::doctor::DoctorReport) {
@@ -99,7 +99,7 @@ fn print_doctor_report(report: &crate::doctor::DoctorReport) {
         report.count_by_status(DoctorStatus::Fail),
         report.count_by_status(DoctorStatus::Skip),
     );
-    
+
     if report.has_failures() {
         eprintln!("{}", summary);
     } else {

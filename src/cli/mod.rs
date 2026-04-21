@@ -8,5 +8,5 @@ pub use commands::{
     ServiceAction, VersionAction,
 };
 pub use error_hint::format_cli_error;
-pub use handlers::run_cli_command;
+pub use handlers::{run_cli_command, run_cli_command_with_exit};
 pub use output::{print_error, print_info, print_success, print_table};

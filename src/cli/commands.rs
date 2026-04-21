@@ -268,6 +268,8 @@ pub enum DoctorAction {
             help = "Comma-separated check ids or categories to fix (e.g. config.current_yaml,config)"
         )]
         only: Option<String>,
+        #[arg(long, help = "Render the fix report as JSON")]
+        json: bool,
     },
 
     #[command(about = "List available doctor checks")]
@@ -430,12 +432,15 @@ mod tests {
             _ => panic!("expected doctor list command"),
         }
 
-        let fix = Cli::try_parse_from(["mihomo-rs", "doctor", "fix", "--only", "config"])
+        let fix = Cli::try_parse_from(["mihomo-rs", "doctor", "fix", "--only", "config", "--json"])
             .expect("doctor fix should parse");
         match fix.command {
             Commands::Doctor {
-                action: DoctorAction::Fix { only },
-            } => assert_eq!(only.as_deref(), Some("config")),
+                action: DoctorAction::Fix { only, json },
+            } => {
+                assert_eq!(only.as_deref(), Some("config"));
+                assert!(json);
+            }
             _ => panic!("expected doctor fix command"),
         }
 
