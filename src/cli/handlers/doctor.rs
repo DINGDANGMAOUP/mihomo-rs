@@ -17,7 +17,7 @@ pub async fn handle_doctor(action: DoctorAction) -> anyhow::Result<i32> {
         }
         DoctorAction::List => {
             let rows = list_checks()
-                .into_iter()
+                .iter()
                 .map(|check| {
                     vec![
                         check.id.to_string(),

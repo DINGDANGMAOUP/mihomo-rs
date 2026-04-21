@@ -4,7 +4,7 @@ use crate::service::{process, ServiceManager, ServiceStatus};
 use crate::version::VersionManager;
 use serde::Serialize;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -575,7 +575,7 @@ async fn check_stale_pid() -> DoctorCheckResult {
     check_stale_pid_at(&pid_file).await
 }
 
-async fn check_stale_pid_at(pid_file: &PathBuf) -> DoctorCheckResult {
+async fn check_stale_pid_at(pid_file: &Path) -> DoctorCheckResult {
     if !pid_file.exists() {
         return pass_result(
             "service.stale_pid",
@@ -585,7 +585,7 @@ async fn check_stale_pid_at(pid_file: &PathBuf) -> DoctorCheckResult {
         );
     }
 
-    match process::read_pid_record(&pid_file).await {
+    match process::read_pid_record(pid_file).await {
         Ok(record) => {
             if process::is_process_alive_checked(record.pid, record.start_time) {
                 pass_result(
@@ -742,12 +742,12 @@ async fn fix_stale_pid() -> anyhow::Result<Option<DoctorFixAction>> {
     fix_stale_pid_at(&pid_file).await
 }
 
-async fn fix_stale_pid_at(pid_file: &PathBuf) -> anyhow::Result<Option<DoctorFixAction>> {
+async fn fix_stale_pid_at(pid_file: &Path) -> anyhow::Result<Option<DoctorFixAction>> {
     if !pid_file.exists() {
         return Ok(None);
     }
 
-    let should_remove = match process::read_pid_record(&pid_file).await {
+    let should_remove = match process::read_pid_record(pid_file).await {
         Ok(record) => !process::is_process_alive_checked(record.pid, record.start_time),
         Err(_) => true,
     };
@@ -756,7 +756,7 @@ async fn fix_stale_pid_at(pid_file: &PathBuf) -> anyhow::Result<Option<DoctorFix
         return Ok(None);
     }
 
-    process::remove_pid_file(&pid_file).await?;
+    process::remove_pid_file(pid_file).await?;
     Ok(Some(DoctorFixAction {
         id: "service.stale_pid".to_string(),
         summary: format!("Removed stale pid file '{}'", pid_file.display()),
