@@ -115,8 +115,52 @@ See [examples/README.md](./examples/README.md) for details.
 - Service: `service start|stop|restart|status|logs|traffic|memory`
 - Proxy: `proxy list|groups|switch|test|current`
 - Connections: `connection list [--host ...] [--process ...]`, `connection stats|stream`, `connection close [--id ...|--all|--host ...|--process ...]`
+- Doctor: `doctor run|fix|list|explain`
 
 For proxies, `list` shows proxy nodes, `groups` shows selectable groups, and `current` shows each group's current selection.
+
+## Doctor
+
+Use `doctor` to inspect config, version, service, and controller health in one place.
+
+```bash
+# Run the default check set
+mihomo-rs doctor run
+
+# Inspect only one category or check id
+mihomo-rs doctor run --only config
+mihomo-rs doctor run --only service.stale_pid
+
+# Machine-readable output
+mihomo-rs doctor run --json
+mihomo-rs doctor fix --only service.stale_pid --json
+
+# List and explain checks
+mihomo-rs doctor list
+mihomo-rs doctor explain controller.api_reachable
+```
+
+The current default checks include:
+
+- config parsing and config-directory resolution
+- current profile and YAML validity
+- default binary availability
+- PID consistency and stale pid-file detection
+- external-controller resolution
+- controller API reachability when the service is running
+
+`doctor fix` is intentionally conservative and only applies safe fixes:
+
+- create a missing configs directory
+- create the missing default/current config file
+- repair or add `external-controller` when it can be derived safely
+- remove a stale or malformed `mihomo.pid`
+
+Exit codes:
+
+- `0`: doctor completed without failing checks
+- `1`: doctor completed and found at least one failing check
+- `2`: doctor itself failed unexpectedly
 
 
 ## Data Directory

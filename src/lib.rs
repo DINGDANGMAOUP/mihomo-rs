@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod connection;
 pub mod core;
+pub mod doctor;
 pub mod proxy;
 pub mod service;
 pub mod version;
@@ -9,6 +10,9 @@ pub mod version;
 pub use config::{ConfigDirInfo, ConfigDirSource, ConfigManager, Profile};
 pub use connection::ConnectionManager;
 pub use core::{MihomoClient, MihomoError, Result};
+pub use doctor::{
+    DoctorCheckResult, DoctorExplain, DoctorFixAction, DoctorFixReport, DoctorReport, DoctorStatus,
+};
 pub use proxy::ProxyManager;
 pub use service::{ServiceManager, ServiceStatus};
 pub use version::{Channel, VersionManager};

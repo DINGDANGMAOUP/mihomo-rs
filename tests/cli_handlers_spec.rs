@@ -3,9 +3,10 @@
 mod common;
 
 use mihomo_rs::cli::{
-    run_cli_command, Commands, ConfigAction, ConnectionAction, ProxyAction, ServiceAction,
-    VersionAction,
+    run_cli_command, run_cli_command_with_exit, Commands, ConfigAction, ConnectionAction,
+    DoctorAction, ProxyAction, ServiceAction, VersionAction,
 };
+use mihomo_rs::service::process;
 use mihomo_rs::{ConfigManager, VersionManager};
 use mockito::{Matcher, Server};
 use std::env;
@@ -245,6 +246,92 @@ async fn run_cli_command_covers_config_version_and_service_paths() {
 
     // Keep one direct manager call to exercise constructor path in this test context.
     let _vm = VersionManager::new().expect("version manager new");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_covers_doctor_paths() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    let cm = ConfigManager::new().expect("config manager");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
+
+    common::install_fake_version(temp.path(), "v1.2.3").await;
+    let vm = VersionManager::new().expect("version manager");
+    vm.set_default("v1.2.3").await.expect("set default version");
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::List,
+    })
+    .await
+    .expect("doctor list");
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::Explain {
+            check_id: "service.stale_pid".to_string(),
+        },
+    })
+    .await
+    .expect("doctor explain");
+
+    let config_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Run {
+            only: Some("config".to_string()),
+            json: true,
+        },
+    })
+    .await
+    .expect("doctor run config");
+    assert_eq!(config_exit, 0);
+
+    let pid_file = temp.path().join("mihomo.pid");
+    process::write_pid_record(&pid_file, u32::MAX, Some(1))
+        .await
+        .expect("write stale pid");
+
+    let stale_pid_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Run {
+            only: Some("service.stale_pid".to_string()),
+            json: false,
+        },
+    })
+    .await
+    .expect("doctor run stale pid");
+    assert_eq!(stale_pid_exit, 0);
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::Fix {
+            only: Some("service.stale_pid".to_string()),
+            json: true,
+        },
+    })
+    .await
+    .expect("doctor fix stale pid");
+    assert!(!pid_file.exists());
+
+    let no_fix_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Fix {
+            only: Some("version".to_string()),
+            json: false,
+        },
+    })
+    .await
+    .expect("doctor fix no-op");
+    assert_eq!(no_fix_exit, 0);
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);
