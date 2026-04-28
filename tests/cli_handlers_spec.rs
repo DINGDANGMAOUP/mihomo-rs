@@ -2,7 +2,11 @@
 
 mod common;
 
-use mihomo_rs::cli::{run_cli_command, Commands, ConfigAction, ConnectionAction, ProxyAction};
+use mihomo_rs::cli::{
+    run_cli_command, run_cli_command_with_exit, Commands, ConfigAction, ConnectionAction,
+    DoctorAction, ProxyAction, ServiceAction, VersionAction,
+};
+use mihomo_rs::service::process;
 use mihomo_rs::{ConfigManager, VersionManager};
 use mockito::{Matcher, Server};
 use std::env;
@@ -163,6 +167,31 @@ async fn run_cli_command_covers_config_version_and_service_paths() {
     .await
     .expect("config list");
     run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Set {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+            value: "icloud/configs".to_string(),
+        },
+    })
+    .await
+    .expect("config set configs-dir");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Unset {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+        },
+    })
+    .await
+    .expect("config unset configs-dir");
+    run_cli_command(Commands::Config {
         action: ConfigAction::Show {
             profile: Some("default".to_string()),
         },
@@ -217,6 +246,92 @@ async fn run_cli_command_covers_config_version_and_service_paths() {
 
     // Keep one direct manager call to exercise constructor path in this test context.
     let _vm = VersionManager::new().expect("version manager new");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_covers_doctor_paths() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    let cm = ConfigManager::new().expect("config manager");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
+
+    common::install_fake_version(temp.path(), "v1.2.3").await;
+    let vm = VersionManager::new().expect("version manager");
+    vm.set_default("v1.2.3").await.expect("set default version");
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::List,
+    })
+    .await
+    .expect("doctor list");
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::Explain {
+            check_id: "service.stale_pid".to_string(),
+        },
+    })
+    .await
+    .expect("doctor explain");
+
+    let config_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Run {
+            only: Some("config".to_string()),
+            json: true,
+        },
+    })
+    .await
+    .expect("doctor run config");
+    assert_eq!(config_exit, 0);
+
+    let pid_file = temp.path().join("mihomo.pid");
+    process::write_pid_record(&pid_file, u32::MAX, Some(1))
+        .await
+        .expect("write stale pid");
+
+    let stale_pid_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Run {
+            only: Some("service.stale_pid".to_string()),
+            json: false,
+        },
+    })
+    .await
+    .expect("doctor run stale pid");
+    assert_eq!(stale_pid_exit, 0);
+
+    run_cli_command(Commands::Doctor {
+        action: DoctorAction::Fix {
+            only: Some("service.stale_pid".to_string()),
+            json: true,
+        },
+    })
+    .await
+    .expect("doctor fix stale pid");
+    assert!(!pid_file.exists());
+
+    let no_fix_exit = run_cli_command_with_exit(Commands::Doctor {
+        action: DoctorAction::Fix {
+            only: Some("version".to_string()),
+            json: false,
+        },
+    })
+    .await
+    .expect("doctor fix no-op");
+    assert_eq!(no_fix_exit, 0);
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);
@@ -359,7 +474,10 @@ async fn run_cli_command_covers_proxy_connection_and_memory_paths() {
     .expect("proxy test all");
 
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::List,
+        action: ConnectionAction::List {
+            host: None,
+            process: None,
+        },
     })
     .await
     .expect("connection list");
@@ -369,42 +487,64 @@ async fn run_cli_command_covers_proxy_connection_and_memory_paths() {
     .await
     .expect("connection stats");
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::FilterHost {
-            host: "example".to_string(),
+        action: ConnectionAction::List {
+            host: Some("example".to_string()),
+            process: None,
         },
     })
     .await
     .expect("connection filter host");
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::FilterProcess {
-            process: "curl".to_string(),
+        action: ConnectionAction::List {
+            host: None,
+            process: Some("curl".to_string()),
         },
     })
     .await
     .expect("connection filter process");
     run_cli_command(Commands::Connection {
         action: ConnectionAction::Close {
-            id: "c1".to_string(),
+            legacy_id: None,
+            id: Some("c1".to_string()),
+            all: false,
+            host: None,
+            process: None,
+            force: false,
         },
     })
     .await
     .expect("connection close");
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::CloseAll { force: true },
+        action: ConnectionAction::Close {
+            legacy_id: None,
+            id: None,
+            all: true,
+            host: None,
+            process: None,
+            force: true,
+        },
     })
     .await
     .expect("connection close all");
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::CloseByHost {
-            host: "example".to_string(),
+        action: ConnectionAction::Close {
+            legacy_id: None,
+            id: None,
+            all: false,
+            host: Some("example".to_string()),
+            process: None,
             force: true,
         },
     })
     .await
     .expect("connection close by host");
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::CloseByProcess {
-            process: "curl".to_string(),
+        action: ConnectionAction::Close {
+            legacy_id: None,
+            id: None,
+            all: false,
+            host: None,
+            process: Some("curl".to_string()),
             force: true,
         },
     })
@@ -591,12 +731,21 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(edge_connections)
-        .expect(2)
+        .expect(5)
+        .create_async()
+        .await;
+    let close_edge = server
+        .mock("DELETE", "/connections/abc123456789")
+        .with_status(204)
+        .expect(1)
         .create_async()
         .await;
 
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::List,
+        action: ConnectionAction::List {
+            host: None,
+            process: None,
+        },
     })
     .await
     .expect("connection list empty");
@@ -632,7 +781,10 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
     .expect("connection close by process empty");
 
     run_cli_command(Commands::Connection {
-        action: ConnectionAction::List,
+        action: ConnectionAction::List {
+            host: None,
+            process: None,
+        },
     })
     .await
     .expect("connection list edge payload");
@@ -643,6 +795,21 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
     })
     .await
     .expect("connection filter process edge payload");
+    run_cli_command(Commands::Connection {
+        action: ConnectionAction::FilterHost {
+            host: "4.4.4.4".to_string(),
+        },
+    })
+    .await
+    .expect("connection filter host by ip");
+    run_cli_command(Commands::Connection {
+        action: ConnectionAction::CloseByHost {
+            host: "4.4.4.4".to_string(),
+            force: true,
+        },
+    })
+    .await
+    .expect("connection close by ip");
 
     // Stream one snapshot then close to exercise stream rendering branches.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -680,6 +847,7 @@ async fn run_cli_command_covers_connection_stream_and_empty_branches() {
 
     mock_empty.assert_async().await;
     mock_edge.assert_async().await;
+    close_edge.assert_async().await;
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);
@@ -720,21 +888,36 @@ async fn run_cli_command_covers_connection_confirmation_branches() {
 
     with_mocked_stdin("n\nn\nn\n", async {
         run_cli_command(Commands::Connection {
-            action: ConnectionAction::CloseAll { force: false },
+            action: ConnectionAction::Close {
+                legacy_id: None,
+                id: None,
+                all: true,
+                host: None,
+                process: None,
+                force: false,
+            },
         })
         .await
         .expect("close all cancelled");
         run_cli_command(Commands::Connection {
-            action: ConnectionAction::CloseByHost {
-                host: "example".to_string(),
+            action: ConnectionAction::Close {
+                legacy_id: None,
+                id: None,
+                all: false,
+                host: Some("example".to_string()),
+                process: None,
                 force: false,
             },
         })
         .await
         .expect("close by host cancelled");
         run_cli_command(Commands::Connection {
-            action: ConnectionAction::CloseByProcess {
-                process: "curl".to_string(),
+            action: ConnectionAction::Close {
+                legacy_id: None,
+                id: None,
+                all: false,
+                host: None,
+                process: Some("curl".to_string()),
                 force: false,
             },
         })
@@ -765,6 +948,11 @@ async fn run_cli_command_covers_config_and_proxy_empty_branches() {
     })
     .await
     .expect("config list empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path empty");
 
     // Invalid config.toml makes get_current() fail and triggers show fallback closure.
     tokio::fs::write(temp.path().join("config.toml"), "default = [")
@@ -818,6 +1006,165 @@ async fn run_cli_command_covers_config_and_proxy_empty_branches() {
     .expect("proxy current empty");
 
     mock_proxies.assert_async().await;
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_covers_config_path_empty_state() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::List,
+    })
+    .await
+    .expect("config list empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current empty");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path empty");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_current_uses_special_character_configs_dir() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    let cm = ConfigManager::new().expect("config manager");
+    cm.set_configs_dir("iCloud Drive/代理配置 (测试) [v2] #1 & team")
+        .await
+        .expect("set special configs dir");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
+    cm.set_current("default")
+        .await
+        .expect("set default current");
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Current,
+    })
+    .await
+    .expect("config current with special dir");
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Path,
+    })
+    .await
+    .expect("config path with special dir");
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_sets_and_unsets_configs_dir() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Set {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+            value: "iCloud Drive/Clash Configs".to_string(),
+        },
+    })
+    .await
+    .expect("config set configs-dir");
+
+    let settings = tokio::fs::read_to_string(temp.path().join("config.toml"))
+        .await
+        .expect("read config.toml");
+    assert!(settings.contains("configs_dir = \"iCloud Drive/Clash Configs\""));
+
+    run_cli_command(Commands::Config {
+        action: ConfigAction::Unset {
+            key: mihomo_rs::cli::ConfigKey::ConfigsDir,
+        },
+    })
+    .await
+    .expect("config unset configs-dir");
+
+    let settings = tokio::fs::read_to_string(temp.path().join("config.toml"))
+        .await
+        .expect("read config.toml after unset");
+    assert!(!settings.contains("configs_dir"));
+
+    if let Some(value) = old_home {
+        env::set_var("MIHOMO_HOME", value);
+    } else {
+        env::remove_var("MIHOMO_HOME");
+    }
+}
+
+#[tokio::test]
+async fn run_cli_command_supports_namespaced_version_and_service_commands() {
+    let _guard = env_lock().lock().await;
+
+    let temp = tempdir().expect("create temp dir");
+    let old_home = env::var("MIHOMO_HOME").ok();
+    env::set_var("MIHOMO_HOME", temp.path());
+
+    common::install_fake_version(temp.path(), "v1.2.3").await;
+
+    let cm = ConfigManager::new().expect("config manager");
+    cm.save(
+        "default",
+        "port: 7890\nexternal-controller: 127.0.0.1:9090\n",
+    )
+    .await
+    .expect("write default profile");
+    cm.set_current("default")
+        .await
+        .expect("set default profile current");
+
+    run_cli_command(Commands::Version {
+        action: VersionAction::Use {
+            version: "v1.2.3".to_string(),
+        },
+    })
+    .await
+    .expect("version use");
+    run_cli_command(Commands::Version {
+        action: VersionAction::List,
+    })
+    .await
+    .expect("version list");
+    run_cli_command(Commands::Service {
+        action: ServiceAction::Status,
+    })
+    .await
+    .expect("service status");
 
     if let Some(value) = old_home {
         env::set_var("MIHOMO_HOME", value);

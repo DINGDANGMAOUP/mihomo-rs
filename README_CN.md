@@ -30,6 +30,29 @@
 cargo install mihomo-rs
 ```
 
+Homebrew：
+
+```bash
+brew tap dingdangmaoup/mihomo-rs
+brew install mihomo-rs
+
+# 全局命令
+mihomo-rs --help
+```
+
+也可以不单独执行 `tap`，直接安装：
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
+升级：
+
+```bash
+brew update
+brew upgrade mihomo-rs
+```
+
 作为库使用：
 
 ```toml
@@ -41,21 +64,21 @@ mihomo-rs = "*"
 
 ```bash
 # 1) 安装并设置版本
-mihomo-rs install stable
-mihomo-rs list
-mihomo-rs default v1.19.17
+mihomo-rs version install stable
+mihomo-rs version list
+mihomo-rs version use v1.19.17
 
 # 2) 启动服务（缺省配置会自动创建）
-mihomo-rs start
-mihomo-rs status
+mihomo-rs service start
+mihomo-rs service status
 
 # 3) 代理操作
 mihomo-rs proxy groups
 mihomo-rs proxy switch GLOBAL "Proxy-A"
 
 # 4) 监控
-mihomo-rs logs --level info
-mihomo-rs traffic
+mihomo-rs service logs --level info
+mihomo-rs service traffic
 mihomo-rs connection stats
 ```
 
@@ -110,12 +133,58 @@ cargo run --example 01_bootstrap
 
 ## 命令总览
 
-- 版本：`install`、`update`、`default`、`list`、`list-remote`、`uninstall`
-- 配置：`config list|use|show|delete`
-- 服务：`start`、`stop`、`restart`、`status`
+- 版本：`version install|update|use|list|list-remote|uninstall`
+- 配置：`config list|current|path|set|unset|use|show|delete`
+- 服务：`service start|stop|restart|status|logs|traffic|memory`
 - 代理：`proxy list|groups|switch|test|current`
-- 监控：`logs`、`traffic`、`memory`
-- 连接：`connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
+- 连接：`connection list [--host ...] [--process ...]`、`connection stats|stream`、`connection close [--id ...|--all|--host ...|--process ...]`
+- 诊断：`doctor run|fix|list|explain`
+
+其中 `proxy list` 用于查看代理节点，`proxy groups` 用于查看可切换分组，`proxy current` 用于查看各分组当前选择。
+
+## Doctor 诊断
+
+可以用 `doctor` 统一检查配置、版本、服务和 controller 状态。
+
+```bash
+# 运行默认检查集
+mihomo-rs doctor run
+
+# 只检查某个分类或单个 check id
+mihomo-rs doctor run --only config
+mihomo-rs doctor run --only service.stale_pid
+
+# 机器可读输出
+mihomo-rs doctor run --json
+mihomo-rs doctor fix --only service.stale_pid --json
+
+# 列出和解释检查项
+mihomo-rs doctor list
+mihomo-rs doctor explain controller.api_reachable
+```
+
+当前默认检查包括：
+
+- `config.toml` 解析和配置目录解析
+- 当前 profile 与 YAML 有效性
+- 默认版本二进制是否存在
+- PID 状态一致性与 stale pid 文件检测
+- `external-controller` 解析
+- 服务运行时的 controller API 探活
+
+`doctor fix` 目前只做保守且安全的修复：
+
+- 创建缺失的 configs 目录
+- 创建缺失的默认/当前配置文件
+- 在可安全推导时补齐或修正 `external-controller`
+- 删除陈旧或损坏的 `mihomo.pid`
+
+退出码约定：
+
+- `0`：doctor 执行完成，且没有 failing checks
+- `1`：doctor 执行完成，但发现了至少一个 failing check
+- `2`：doctor 自身执行异常
+
 
 ## 数据目录
 
@@ -135,6 +204,26 @@ cargo run --example 01_bootstrap
 export MIHOMO_HOME=/custom/path
 ```
 
+如果只想把 profile 配置放到 iCloud 或其他云同步目录，而版本、PID 等运行文件仍保留在本地，
+可以在 `config.toml` 里单独配置 `configs` 目录：
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+也可以临时通过环境变量覆盖：
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+也可以直接通过 CLI 写入 `config.toml`：
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
 ## 开发
 
 ```bash
@@ -144,6 +233,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
+
+## 发布到 Homebrew
+
+打 tag 发布后，会自动更新独立的 Homebrew tap：
+
+- GitHub Releases 继续作为二进制分发源
+- tap 仓库 `DINGDANGMAOUP/homebrew-mihomo-rs` 保存 `Formula/mihomo-rs.rb`
+- 用户后续升级直接走标准 Homebrew 流程：`brew update && brew upgrade mihomo-rs`
+- tap 仓库地址：[DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## 安全
 

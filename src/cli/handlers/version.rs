@@ -1,5 +1,16 @@
-use crate::cli::{print_info, print_success, print_table};
+use crate::cli::{print_info, print_success, print_table, VersionAction};
 use crate::version::{Channel, VersionManager};
+
+pub async fn handle_version(action: VersionAction) -> anyhow::Result<()> {
+    match action {
+        VersionAction::Install { version } => handle_install(version).await,
+        VersionAction::Update => handle_update().await,
+        VersionAction::Use { version } => handle_default(version).await,
+        VersionAction::List => handle_list().await,
+        VersionAction::ListRemote { limit } => handle_list_remote(limit).await,
+        VersionAction::Uninstall { version } => handle_uninstall(version).await,
+    }
+}
 
 pub async fn handle_install(version: Option<String>) -> anyhow::Result<()> {
     let vm = VersionManager::new()?;

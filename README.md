@@ -30,6 +30,29 @@ Rust SDK and CLI for [mihomo](https://github.com/MetaCubeX/mihomo): version inst
 cargo install mihomo-rs
 ```
 
+Homebrew:
+
+```bash
+brew tap dingdangmaoup/mihomo-rs
+brew install mihomo-rs
+
+# Global command
+mihomo-rs --help
+```
+
+Or install directly without a separate tap step:
+
+```bash
+brew install dingdangmaoup/mihomo-rs/mihomo-rs
+```
+
+Upgrade with:
+
+```bash
+brew update
+brew upgrade mihomo-rs
+```
+
 Library usage:
 
 ```toml
@@ -41,21 +64,21 @@ mihomo-rs = "*"
 
 ```bash
 # 1) Install and select a kernel version
-mihomo-rs install stable
-mihomo-rs list
-mihomo-rs default v1.19.17
+mihomo-rs version install stable
+mihomo-rs version list
+mihomo-rs version use v1.19.17
 
 # 2) Start service (auto-creates default config when missing)
-mihomo-rs start
-mihomo-rs status
+mihomo-rs service start
+mihomo-rs service status
 
 # 3) Proxy operations
 mihomo-rs proxy groups
 mihomo-rs proxy switch GLOBAL "Proxy-A"
 
 # 4) Observability
-mihomo-rs logs --level info
-mihomo-rs traffic
+mihomo-rs service logs --level info
+mihomo-rs service traffic
 mihomo-rs connection stats
 ```
 
@@ -110,12 +133,58 @@ See [examples/README.md](./examples/README.md) for details.
 
 ## CLI Command Map
 
-- Version: `install`, `update`, `default`, `list`, `list-remote`, `uninstall`
-- Config: `config list|use|show|delete`
-- Service: `start`, `stop`, `restart`, `status`
+- Version: `version install|update|use|list|list-remote|uninstall`
+- Config: `config list|current|path|set|unset|use|show|delete`
+- Service: `service start|stop|restart|status|logs|traffic|memory`
 - Proxy: `proxy list|groups|switch|test|current`
-- Telemetry: `logs`, `traffic`, `memory`
-- Connections: `connection list|stats|stream|close|close-all|filter-host|filter-process|close-by-host|close-by-process`
+- Connections: `connection list [--host ...] [--process ...]`, `connection stats|stream`, `connection close [--id ...|--all|--host ...|--process ...]`
+- Doctor: `doctor run|fix|list|explain`
+
+For proxies, `list` shows proxy nodes, `groups` shows selectable groups, and `current` shows each group's current selection.
+
+## Doctor
+
+Use `doctor` to inspect config, version, service, and controller health in one place.
+
+```bash
+# Run the default check set
+mihomo-rs doctor run
+
+# Inspect only one category or check id
+mihomo-rs doctor run --only config
+mihomo-rs doctor run --only service.stale_pid
+
+# Machine-readable output
+mihomo-rs doctor run --json
+mihomo-rs doctor fix --only service.stale_pid --json
+
+# List and explain checks
+mihomo-rs doctor list
+mihomo-rs doctor explain controller.api_reachable
+```
+
+The current default checks include:
+
+- config parsing and config-directory resolution
+- current profile and YAML validity
+- default binary availability
+- PID consistency and stale pid-file detection
+- external-controller resolution
+- controller API reachability when the service is running
+
+`doctor fix` is intentionally conservative and only applies safe fixes:
+
+- create a missing configs directory
+- create the missing default/current config file
+- repair or add `external-controller` when it can be derived safely
+- remove a stale or malformed `mihomo.pid`
+
+Exit codes:
+
+- `0`: doctor completed without failing checks
+- `1`: doctor completed and found at least one failing check
+- `2`: doctor itself failed unexpectedly
+
 
 ## Data Directory
 
@@ -135,6 +204,26 @@ Override with:
 export MIHOMO_HOME=/custom/path
 ```
 
+To keep only profile files in a cloud-synced folder while leaving binaries and runtime files local,
+set a dedicated config directory in `config.toml`:
+
+```toml
+[paths]
+configs_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
+You can also override it temporarily with:
+
+```bash
+export MIHOMO_CONFIGS_DIR=/custom/configs/path
+```
+
+Or write it into `config.toml` via CLI:
+
+```bash
+mihomo-rs config set configs-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mihomo-rs/configs"
+```
+
 ## Development
 
 ```bash
@@ -144,6 +233,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
+
+## Release To Homebrew
+
+Tagged releases update the dedicated Homebrew tap automatically.
+
+- Release archives are published on GitHub Releases.
+- The tap repository `DINGDANGMAOUP/homebrew-mihomo-rs` stores `Formula/mihomo-rs.rb`.
+- Users upgrade with standard Homebrew flow: `brew update && brew upgrade mihomo-rs`.
+- Tap repository: [DINGDANGMAOUP/homebrew-mihomo-rs](https://github.com/DINGDANGMAOUP/homebrew-mihomo-rs)
 
 ## Security
 
