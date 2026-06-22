@@ -20,7 +20,7 @@ jobs:
     name: Validate Tag Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Verify tag version matches Cargo.toml
         run: |
@@ -44,7 +44,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -106,7 +106,7 @@ jobs:
             asset_name: mihomo-rs-windows-amd64.exe
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -183,7 +183,7 @@ jobs:
     needs: build-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -215,12 +215,12 @@ jobs:
             echo "Homebrew tap publishing skipped because HOMEBREW_TAP_REPO or HOMEBREW_TAP_TOKEN is not configured."
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.tap_settings.outputs.enabled == 'true'
 
       - name: Checkout tap repository
         if: steps.tap_settings.outputs.enabled == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.HOMEBREW_TAP_REPO }}
           token: ${{ env.HOMEBREW_TAP_TOKEN }}
