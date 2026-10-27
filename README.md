@@ -24,6 +24,26 @@ Rust SDK and CLI for [mihomo](https://github.com/MetaCubeX/mihomo): version inst
 - Query/filter/close active connections.
 - Stream logs, traffic, and connection snapshots via WebSocket APIs.
 
+## Migrating to 3.0
+
+Version 3.0 updates security-sensitive TLS/archive dependencies and replaces the
+unmaintained YAML parser with `serde_norway`. CLI commands and configuration file
+semantics are unchanged; ordinary save/load preserves the original YAML bytes.
+
+**Breaking library change:** `MihomoError::Yaml` now contains
+`serde_norway::Error`. The old `From<serde_yaml::Error>` conversion is removed,
+including implicit conversion via `?`. If your application names that error type
+or propagates parser errors into `MihomoError`, replace its deprecated parser
+dependency with the maintained fork (the alias preserves existing imports):
+
+```toml
+serde_yaml = { package = "serde_norway", version = "0.9.42" }
+```
+
+Alternatively, use `serde_norway` directly and update imports. Applications that
+need both parsers must explicitly map errors from the old crate; the two error
+types are not interchangeable. See [3.0.0 release notes](RELEASE_NOTES.md).
+
 ## Install
 
 ```bash
@@ -57,7 +77,7 @@ Library usage:
 
 ```toml
 [dependencies]
-mihomo-rs = "*"
+mihomo-rs = "3"
 ```
 
 ## Quick Start (CLI)

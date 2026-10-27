@@ -1,0 +1,39 @@
+# Preserve this comment and original formatting on ordinary save/load.
+port: 7890
+allow-lan: false
+mode: rule
+external-controller: api.example.test:9090
+secret: "012345"
+proxy-defaults: &defaults
+  type: ss
+  cipher: aes-128-gcm
+  udp: true
+proxies:
+  - <<: *defaults
+    name: "香港节点"
+    server: proxy.example.test
+    port: 443
+    password: "false"
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies: [香港节点, DIRECT]
+dns:
+  enable: true
+  nameserver: [https://dns.example.test/dns-query]
+  nameserver-policy:
+    '+.example.test': 1.1.1.1
+tun: {enable: false, stack: mixed}
+rules:
+  - DOMAIN-SUFFIX,example.test,自动选择
+  - MATCH,DIRECT
+notes: |
+  first line
+  第二行
+metadata: !custom {owner: user}
+# YAML permits non-string keys even though typical Mihomo fields use strings.
+extra:
+  ? [one, two]
+  : pair
+large-number: 18446744073709551615
+quoted-number: '0123'
