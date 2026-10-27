@@ -24,22 +24,15 @@
 - 查询/过滤/关闭连接。
 - 通过 WebSocket 流式读取日志、流量和连接快照。
 
-## 迁移到 3.0
+## 2.2.1 安全补丁
 
-3.0 升级了 TLS/压缩包相关安全依赖，并将已停止维护的 YAML 解析器替换为
-`serde_norway`。CLI 命令与配置语义保持不变；普通保存/读取仍保留原始 YAML 字节。
+本补丁升级 TLS/压缩包依赖及 Tokio/anyhow，并保留 2.x API。
+`MihomoError::Yaml` 仍包含 `serde_yaml::Error`，继续支持 `.into()` 和 `?` 转换，
+不需要迁移 YAML 解析库。
 
-**库 API 不兼容变化：** `MihomoError::Yaml` 现在包含 `serde_norway::Error`。
-旧的 `From<serde_yaml::Error>` 转换（包括 `?` 隐式转换）已移除。如果应用显式使用
-该错误类型，或将解析错误传递为 `MihomoError`，请替换已弃用的解析依赖；可用别名
-保留现有导入名称：
-
-```toml
-serde_yaml = { package = "serde_norway", version = "0.9.42" }
-```
-
-也可直接使用 `serde_norway` 并修改导入。同时使用两个解析器的应用需要显式映射旧库
-错误，两个错误类型不能直接互换。详见 [3.0.0 发布说明](RELEASE_NOTES.md)。
+为保持兼容性，保留原 YAML 依赖；其间接依赖 `unsafe-libyaml` 已停止维护
+（RUSTSEC-2024-0449）。漏洞审计无漏洞，但仍有该维护告警，依赖策略检查仍因此失败。
+未隐藏或忽略任何告警。详见 [发布说明](RELEASE_NOTES.md)。
 
 ## 安装
 
@@ -74,7 +67,7 @@ brew upgrade mihomo-rs
 
 ```toml
 [dependencies]
-mihomo-rs = "3"
+mihomo-rs = "2.2.1"
 ```
 
 ## 快速开始（CLI）
