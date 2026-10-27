@@ -24,6 +24,23 @@
 - 查询/过滤/关闭连接。
 - 通过 WebSocket 流式读取日志、流量和连接快照。
 
+## 迁移到 3.0
+
+3.0 升级了 TLS/压缩包相关安全依赖，并将已停止维护的 YAML 解析器替换为
+`serde_norway`。CLI 命令与配置语义保持不变；普通保存/读取仍保留原始 YAML 字节。
+
+**库 API 不兼容变化：** `MihomoError::Yaml` 现在包含 `serde_norway::Error`。
+旧的 `From<serde_yaml::Error>` 转换（包括 `?` 隐式转换）已移除。如果应用显式使用
+该错误类型，或将解析错误传递为 `MihomoError`，请替换已弃用的解析依赖；可用别名
+保留现有导入名称：
+
+```toml
+serde_yaml = { package = "serde_norway", version = "0.9.42" }
+```
+
+也可直接使用 `serde_norway` 并修改导入。同时使用两个解析器的应用需要显式映射旧库
+错误，两个错误类型不能直接互换。详见 [3.0.0 发布说明](RELEASE_NOTES.md)。
+
 ## 安装
 
 ```bash
@@ -57,7 +74,7 @@ brew upgrade mihomo-rs
 
 ```toml
 [dependencies]
-mihomo-rs = "*"
+mihomo-rs = "3"
 ```
 
 ## 快速开始（CLI）
