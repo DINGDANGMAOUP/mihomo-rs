@@ -242,6 +242,48 @@ mod tests {
     }
 
     #[test]
+    fn test_decompress_zip_preserves_supported_compression_methods() {
+        use std::io::{Cursor, Write};
+        use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+        let payload = b"MZ fake Windows core payload for compression regression tests";
+        for method in [
+            CompressionMethod::Stored,
+            CompressionMethod::Deflated,
+            CompressionMethod::Bzip2,
+            CompressionMethod::Zstd,
+        ] {
+            let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+            writer
+                .start_file(
+                    "mihomo.exe",
+                    SimpleFileOptions::default().compression_method(method),
+                )
+                .unwrap();
+            writer.write_all(payload).unwrap();
+            let archive = writer.finish().unwrap().into_inner();
+            assert_eq!(
+                Downloader::decompress_zip(&archive).unwrap(),
+                payload,
+                "compression method {method:?} must remain supported"
+            );
+        }
+    }
+
+    #[test]
+    fn test_decompress_empty_zip_fails() {
+        use std::io::Cursor;
+        use zip::ZipWriter;
+
+        let writer = ZipWriter::new(Cursor::new(Vec::new()));
+        let archive = writer.finish().unwrap().into_inner();
+        let error = Downloader::decompress_zip(&archive).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Expected 1 file in zip archive, found 0"));
+    }
+
+    #[test]
     fn test_decompress_zip_with_multiple_files_fails() {
         use std::io::{Cursor, Write};
         use zip::write::SimpleFileOptions;
