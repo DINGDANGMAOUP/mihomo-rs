@@ -12,14 +12,15 @@ readme = "README.md"
 
 
 [dependencies]
-tokio = { version = "1.52", features = ["full"] }
+tokio = { version = "1.53.3", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 clap = { version = "4.6.1", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
+# Maintained API-compatible fork; retain the import name for existing callers.
+serde_yaml = { package = "serde_norway", version = "0.9.42" }
 thiserror = "2.0"
-anyhow = "1.0"
+anyhow = "1.0.103"
 tokio-util = { version = "0.7", features = ["io"] }
 sysinfo = "0.39.3"
 url = "2.5"

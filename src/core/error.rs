@@ -86,6 +86,11 @@ pub enum MihomoError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// YAML parsing/serialization error from the maintained `serde_norway` crate.
+    ///
+    /// The dependency keeps the internal `serde_yaml` import alias; downstream
+    /// code accessing this payload must use `serde_norway::Error`, not the
+    /// deprecated `serde_yaml::Error` type.
     #[error("YAML error: {0}")]
     Yaml(#[from] serde_yaml::Error),
 
