@@ -1,6 +1,6 @@
 [package]
 name = "mihomo-rs"
-version = "3.0.0"
+version = "2.2.1"
 edition = "2021"
 authors = ["dingdangmaoup"]
 description = "A Rust SDK and CLI tool for mihomo proxy management with service lifecycle management, configuration handling, and real-time monitoring"
@@ -17,8 +17,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 clap = { version = "4.6.1", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# Maintained API-compatible fork; retain the import name for existing callers.
-serde_yaml = { package = "serde_norway", version = "0.9.42" }
+# Preserve the public serde_yaml::Error type and From conversion in the 2.x API.
+serde_yaml = "0.9"
 thiserror = "2.0"
 anyhow = "1.0.103"
 tokio-util = { version = "0.7", features = ["io"] }

@@ -1,4 +1,4 @@
-//! Contracts retained when replacing deprecated serde_yaml with serde_norway.
+//! YAML configuration and public error contracts retained by the 2.2.1 patch.
 use mihomo_rs::config::Profile;
 use mihomo_rs::{ConfigManager, MihomoError};
 use serde_yaml::Value;
@@ -95,4 +95,18 @@ async fn invalid_yaml_is_reported_and_does_not_overwrite_saved_profile() {
             .unwrap_err();
         assert!(matches!(error, MihomoError::Yaml(_)));
     }
+}
+
+#[test]
+fn original_yaml_error_payload_and_conversions_remain_compatible() {
+    fn parse(content: &str) -> Result<Value, MihomoError> {
+        Ok(serde_yaml::from_str(content)?)
+    }
+    let original: serde_yaml::Error = serde_yaml::from_str::<Value>("a: [").unwrap_err();
+    let converted: MihomoError = original.into();
+    let MihomoError::Yaml(payload) = converted else {
+        panic!("expected original YAML error variant");
+    };
+    let _: serde_yaml::Error = payload;
+    assert!(matches!(parse("a: ["), Err(MihomoError::Yaml(_))));
 }

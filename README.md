@@ -24,25 +24,16 @@ Rust SDK and CLI for [mihomo](https://github.com/MetaCubeX/mihomo): version inst
 - Query/filter/close active connections.
 - Stream logs, traffic, and connection snapshots via WebSocket APIs.
 
-## Migrating to 3.0
+## 2.2.1 security patch
 
-Version 3.0 updates security-sensitive TLS/archive dependencies and replaces the
-unmaintained YAML parser with `serde_norway`. CLI commands and configuration file
-semantics are unchanged; ordinary save/load preserves the original YAML bytes.
+This patch updates TLS/archive dependencies and Tokio/anyhow while preserving the
+2.x API. `MihomoError::Yaml` still contains `serde_yaml::Error`; `.into()` and `?`
+conversions remain supported. No YAML parser migration is required.
 
-**Breaking library change:** `MihomoError::Yaml` now contains
-`serde_norway::Error`. The old `From<serde_yaml::Error>` conversion is removed,
-including implicit conversion via `?`. If your application names that error type
-or propagates parser errors into `MihomoError`, replace its deprecated parser
-dependency with the maintained fork (the alias preserves existing imports):
-
-```toml
-serde_yaml = { package = "serde_norway", version = "0.9.42" }
-```
-
-Alternatively, use `serde_norway` directly and update imports. Applications that
-need both parsers must explicitly map errors from the old crate; the two error
-types are not interchangeable. See [3.0.0 release notes](RELEASE_NOTES.md).
+The original YAML dependency is retained for compatibility. Its transitive
+`unsafe-libyaml` dependency is unmaintained (RUSTSEC-2024-0449): vulnerability audit
+reports no vulnerabilities but this warning remains, and dependency policy checks
+still fail on it. No advisory is suppressed. See [release notes](RELEASE_NOTES.md).
 
 ## Install
 
@@ -77,7 +68,7 @@ Library usage:
 
 ```toml
 [dependencies]
-mihomo-rs = "3"
+mihomo-rs = "2.2.1"
 ```
 
 ## Quick Start (CLI)
