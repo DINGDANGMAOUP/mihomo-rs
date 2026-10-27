@@ -51,21 +51,25 @@ async fn config_save_load_and_profile_validation_preserve_original_yaml() {
 
 #[tokio::test]
 async fn controller_rewrite_preserves_yaml_semantics() {
-    let home = tempdir().unwrap();
-    let manager = ConfigManager::with_home(home.path().to_path_buf()).unwrap();
-    let source = CONFIG.replace("external-controller: api.example.test:9090\n", "");
-    manager.save("compat", &source).await.unwrap();
-    manager.set_current("compat").await.unwrap();
-    let controller = manager.ensure_external_controller().await.unwrap();
-    assert!(controller.starts_with("http://127.0.0.1:"));
-    let mut rewritten: Value =
-        serde_yaml::from_str(&manager.load("compat").await.unwrap()).unwrap();
-    let expected: Value = serde_yaml::from_str(&source).unwrap();
-    rewritten
-        .as_mapping_mut()
-        .unwrap()
-        .remove(Value::from("external-controller"));
-    assert_eq!(rewritten, expected);
+    // Windows checkouts may convert fixture newlines to CRLF. Exercise both forms.
+    let lf = CONFIG.replace("\r\n", "\n");
+    for config in [&lf, &lf.replace('\n', "\r\n")] {
+        let home = tempdir().unwrap();
+        let manager = ConfigManager::with_home(home.path().to_path_buf()).unwrap();
+        let source = config.replace("external-controller: api.example.test:9090", "");
+        manager.save("compat", &source).await.unwrap();
+        manager.set_current("compat").await.unwrap();
+        let controller = manager.ensure_external_controller().await.unwrap();
+        assert!(controller.starts_with("http://127.0.0.1:"));
+        let mut rewritten: Value =
+            serde_yaml::from_str(&manager.load("compat").await.unwrap()).unwrap();
+        let expected: Value = serde_yaml::from_str(&source).unwrap();
+        rewritten
+            .as_mapping_mut()
+            .unwrap()
+            .remove(Value::from("external-controller"));
+        assert_eq!(rewritten, expected);
+    }
 }
 
 #[tokio::test]

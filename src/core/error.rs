@@ -90,7 +90,8 @@ pub enum MihomoError {
     ///
     /// The dependency keeps the internal `serde_yaml` import alias; downstream
     /// code accessing this payload must use `serde_norway::Error`, not the
-    /// deprecated `serde_yaml::Error` type.
+    /// deprecated `serde_yaml::Error` type. The old type's `From` conversion
+    /// (including propagation through `?`) is no longer provided.
     #[error("YAML error: {0}")]
     Yaml(#[from] serde_yaml::Error),
 
